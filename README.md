@@ -1,4 +1,4 @@
-# Virtual Crypto Exchange (VCE)
+# Virtual Crypto Exchange Full Stack Project
 
 ## Website
 This project can be found at [www.mmlynarik.com](https://www.mmlynarik.com)
