@@ -28,6 +28,8 @@ services:
     restart: always
     networks:
       - caddy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   web:
     image: docker.io/miromlynarik/vce-web:prod
@@ -46,6 +48,8 @@ services:
     restart: always
     networks:
       - caddy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   caddy:
     image: caddy:2.10
@@ -58,6 +62,16 @@ services:
       - caddy_data:/data
     networks:
       - caddy
+
+  watchtower:
+    image: containrrr/watchtower
+    command:
+      - "--label-enable"
+      - "--interval"
+      - "30"
+      - "rolling-restart"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   prod_db:
