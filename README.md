@@ -1,7 +1,7 @@
 # Virtual Crypto Exchange (VCE)
 
 ## Homepage
-This project can be found at ```www.mmlynarik.com```
+This project can be found at [www.mmlynarik.com](www.mmlynarik.com)
 
 
 ## Features
