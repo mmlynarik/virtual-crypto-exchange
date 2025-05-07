@@ -14,3 +14,4 @@ db:
 
 be:
 	cd api && fastapi dev --host "0.0.0.0" --port 8000 --reload src/vce/app.py
+
