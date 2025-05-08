@@ -68,7 +68,7 @@ services:
     command:
       - "--label-enable"
       - "--interval"
-      - "300"
+      - "301"
       - "--rolling-restart"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
