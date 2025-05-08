@@ -3,12 +3,15 @@ import NextImageLink from "@/components/NextImageLink";
 
 export default function Login() {
     return (
-        <div className="grid max-h-screen grid-rows-[20px_1fr_20px] items-center justify-items-center gap-15 font-[family-name:var(--font-geist-sans)] sm:p-15">
-            <main className="row-start-2 flex flex-col items-center gap-12">
-                <h1 className="text-3xl">Welcome to Virtual Crypto Exchange</h1>
+        <div className="flex flex-col gap-30 items-center">
+            <div className="mt-40 flex items-center justify-center gap-60">
+                <div className="flex flex-col gap-5">
+                    <h1 className="text-4xl font-bold text-sky-600">Virtual Crypto Exchange</h1>
+                    <h2 className="text-2xl font-bold">Your safe place to trade crypto</h2>
+                </div>
                 <LoginForm />
-            </main>
-            <footer className="row-start-3 flex justify-center">
+            </div>
+            <footer>
                 <NextImageLink />
             </footer>
         </div>
