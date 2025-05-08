@@ -3,12 +3,15 @@ import SignUpForm from "@/components/SignUpForm";
 
 export default function SignUp() {
     return (
-        <div className="grid max-h-screen grid-rows-[20px_1fr_20px] items-center justify-items-center gap-15 font-[family-name:var(--font-geist-sans)] sm:p-15">
-            <main className="row-start-2 flex flex-col items-center gap-12">
-                <h1 className="text-3xl">Register a new account</h1>
+        <div className="flex flex-col items-center gap-30">
+            <div className="mt-40 flex items-center justify-center gap-50">
+                <div className="flex flex-col gap-5">
+                    <h1 className="text-5xl font-bold text-sky-600">Virtual Crypto Exchange</h1>
+                    <h2 className="text-3xl">Your safe place to trade crypto</h2>
+                </div>
                 <SignUpForm />
-            </main>
-            <footer className="row-start-3 flex justify-center">
+            </div>
+            <footer>
                 <NextImageLink />
             </footer>
         </div>
