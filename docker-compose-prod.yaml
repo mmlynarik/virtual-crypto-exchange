@@ -1,5 +1,5 @@
 services:
-  postgres:
+  db:
     restart: always
     image: postgres:15
     container_name: postgres
@@ -24,7 +24,7 @@ services:
     ports:
       - 8000:8000
     depends_on:
-      - postgres
+      - db
     restart: always
     networks:
       - caddy
@@ -43,7 +43,7 @@ services:
     ports:
       - 3000:3000
     depends_on:
-      - postgres
+      - db
       - api
     restart: always
     networks:
