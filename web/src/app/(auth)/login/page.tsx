@@ -11,7 +11,7 @@ export default function Login() {
                 </div>
                 <LoginForm />
             </div>
-            <footer>
+            <footer className="fixed bottom-1/10">
                 <NextImageLink />
             </footer>
         </div>
