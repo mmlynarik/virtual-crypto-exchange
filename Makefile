@@ -1,5 +1,8 @@
 .PHONY: runprod rmprod db api ui
 
+rundev:
+	docker-compose -f docker-compose-dev.yaml up
+
 runprod:
 	docker-compose -f docker-compose-prod.yaml up
 
@@ -14,4 +17,3 @@ db:
 
 be:
 	cd api && fastapi dev --host "0.0.0.0" --port 8000 --reload src/vce/app.py
-
