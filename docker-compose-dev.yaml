@@ -1,3 +1,4 @@
+name: vce-dev
 services:
   postgres:
     restart: always
