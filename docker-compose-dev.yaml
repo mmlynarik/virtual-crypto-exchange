@@ -16,6 +16,7 @@ services:
   api:
     build:
       context: ./api
+      target: dev
     container_name: api
     environment:
       - BACKEND_DB_USER=postgres
@@ -27,6 +28,8 @@ services:
     depends_on:
       - postgres
     restart: always
+    volumes:
+      - ./api/src:/app/src
     networks:
       - caddy
 
