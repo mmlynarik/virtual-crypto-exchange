@@ -53,7 +53,7 @@ HTTPClientDep = Annotated[AsyncClient, Depends(get_http_client)]
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the FastAPI app!"}
+    return {"message": "Welcome to the FastAPI appppp!"}
 
 
 @app.get("/coins/{symbol}")
