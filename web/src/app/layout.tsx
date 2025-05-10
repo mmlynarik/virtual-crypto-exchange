@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en">
-            <body className={`${coinBaseSans.variable} antialiased`}>{children}</body>
+            <body className={`${coinBaseSans.variable} antialiased font-sans`}>{children}</body>
         </html>
     );
 }
