@@ -8,7 +8,7 @@ export default function SignUp() {
                 <h1 className="text-5xl font-bold text-sky-600">Virtual Crypto Exchange</h1>
                 <h2 className="text-3xl">Your safe place to trade crypto</h2>
             </div>
-            <div className="absolute inset-y-2/11 start-3/5">
+            <div className="absolute inset-y-1/5 start-3/5">
                 <SignUpForm />
             </div>
             <footer className="absolute bottom-1/10">
