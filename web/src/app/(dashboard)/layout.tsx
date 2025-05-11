@@ -11,17 +11,18 @@ import Link from "next/link";
 type NavItemProps = {
     icon: ReactElement;
     name: string;
-    link: string
+    link: string;
 };
 
 function NavItem({icon, name, link}: NavItemProps) {
     return (
-        <div className="rounded-full p-4 hover:bg-slate-100 active:bg-sky-50">
-            <Link href={link} className="flex items-center gap-4">
-                {icon}
-                <span className="font-bold">{name}</span>
-            </Link>
-        </div>
+        <Link
+            href={link}
+            className="flex items-center gap-4 rounded-full p-4 hover:bg-slate-100 active:bg-sky-50"
+        >
+            {icon}
+            <span className="font-bold">{name}</span>
+        </Link>
     );
 }
 
