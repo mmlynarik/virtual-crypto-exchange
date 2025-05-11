@@ -28,7 +28,7 @@ export default function Home() {
         <div className="flex bg-white">
             <nav className="min-h-screen w-[240px] border-r-1 p-3.25">
                 <div className="flex flex-col">
-                    <div className="pt-3 pl-3 pb-8">
+                    <div className="pt-3 pl-3 pb-9">
                         <Image
                             className="size-8"
                             src="/coinbase-logo.png"
