@@ -1,10 +1,11 @@
 // import LogoutButton from "@/components/LogoutButton";
 import Image from "next/image";
-import {House, ChartPie, ReceiptText } from "lucide-react";
+import {House, ChartPie, ReceiptText} from "lucide-react";
 import {ReactElement} from "react";
+import Link from "next/link";
 
 {
-    /*  house chart-pie receipt-text grip ellipsis-vertical bell */
+    /* grip ellipsis-vertical bell */
 }
 
 type NavItemProps = {
@@ -14,11 +15,11 @@ type NavItemProps = {
 
 function NavItem({icon, name}: NavItemProps) {
     return (
-        <div className="p-4">
-            <div className="flex items-center gap-4">
+        <div className="rounded-full p-4 hover:bg-slate-100 active:bg-sky-50">
+            <Link href="/assets" className="flex items-center gap-4">
                 {icon}
                 <span className="font-bold">{name}</span>
-            </div>
+            </Link>
         </div>
     );
 }
@@ -26,9 +27,9 @@ function NavItem({icon, name}: NavItemProps) {
 export default function Home() {
     return (
         <div className="flex bg-white">
-            <nav className="min-h-screen w-[240px] border-r-1 p-3.25">
+            <nav className="min-h-screen w-60 border-r-1 p-3.25">
                 <div className="flex flex-col">
-                    <div className="pt-3 pl-3 pb-9">
+                    <div className="pt-3 pb-9 pl-3">
                         <Image
                             className="size-8"
                             src="/coinbase-logo.png"
@@ -45,7 +46,7 @@ export default function Home() {
                 </div>
             </nav>
             <main>
-                <h1>Home</h1>
+                <h3 className="p-4">Home</h3>
             </main>
         </div>
     );
