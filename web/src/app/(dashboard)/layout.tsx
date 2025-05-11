@@ -11,12 +11,13 @@ import Link from "next/link";
 type NavItemProps = {
     icon: ReactElement;
     name: string;
+    link: string
 };
 
-function NavItem({icon, name}: NavItemProps) {
+function NavItem({icon, name, link}: NavItemProps) {
     return (
         <div className="rounded-full p-4 hover:bg-slate-100 active:bg-sky-50">
-            <Link href="/assets" className="flex items-center gap-4">
+            <Link href={link} className="flex items-center gap-4">
                 {icon}
                 <span className="font-bold">{name}</span>
             </Link>
@@ -38,9 +39,9 @@ function NavBar() {
                     />
                 </div>
                 <div className="flex flex-col gap-1">
-                    <NavItem icon={<House />} name="Home" />
-                    <NavItem icon={<ChartPie />} name="My assets" />
-                    <NavItem icon={<ReceiptText />} name="Transactions" />
+                    <NavItem icon={<House />} name="Home" link="/home" />
+                    <NavItem icon={<ChartPie />} name="My assets" link="/assets" />
+                    <NavItem icon={<ReceiptText />} name="Transactions" link="/transactions" />
                 </div>
             </div>
         </nav>

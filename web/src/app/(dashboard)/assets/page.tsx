@@ -1,6 +1,6 @@
 
 export default function Assets() {
     return (
-        <div>Assets</div>
+       <h3 className="p-4">Assets</h3>
     )
 }
