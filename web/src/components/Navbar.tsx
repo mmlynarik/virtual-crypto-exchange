@@ -1,7 +1,7 @@
 "use client";
 // import LogoutButton from "@/components/LogoutButton";
 import Image from "next/image";
-import {House, ChartPie, ReceiptText} from "lucide-react";
+import {House, ChartPie, ReceiptText, LucideProps} from "lucide-react";
 import {ComponentType} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
@@ -11,7 +11,7 @@ import {usePathname} from "next/navigation";
 }
 
 type NavItemProps = {
-    Icon: ComponentType;
+    Icon: ComponentType<LucideProps>;
     name: string;
     href: string;
 };
