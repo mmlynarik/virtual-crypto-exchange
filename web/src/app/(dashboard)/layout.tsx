@@ -30,14 +30,16 @@ function NavBar() {
     return (
         <nav className="min-h-screen w-60 border-r-1 p-3.25">
             <div className="flex flex-col">
-                <div className="pt-3 pb-9 pl-3">
-                    <Image
-                        className="size-8"
-                        src="/coinbase-logo.png"
-                        width={25}
-                        height={25}
-                        alt="Coinbase logo"
-                    />
+                <div className="flex pt-3 pb-9 pl-3">
+                    <Link href="/home">
+                        <Image
+                            className="size-8"
+                            src="/coinbase-logo.png"
+                            width={25}
+                            height={25}
+                            alt="Coinbase logo"
+                        />
+                    </Link>
                 </div>
                 <div className="flex flex-col gap-1">
                     <NavItem icon={<House />} name="Home" link="/home" />
