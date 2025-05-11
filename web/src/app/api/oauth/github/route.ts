@@ -17,5 +17,5 @@ export async function GET(request: NextRequest) {
     await setJWTSessionHeader(accessToken, refreshToken);
     console.log(`User with id=${user.id} logged in`);
 
-    redirect("/dashboard");
+    redirect("/home");
 }

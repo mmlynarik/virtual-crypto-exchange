@@ -37,7 +37,7 @@ export async function loginAction(_: FormState, formData: FormData): Promise<For
     const {accessToken, refreshToken} = await createJWTSession(user.id);
     await setJWTSessionHeader(accessToken, refreshToken);
     console.log(`User with id=${user.id} logged in`);
-    redirect("/dashboard");
+    redirect("/home");
 }
 
 export async function githubLogin() {

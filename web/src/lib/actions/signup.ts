@@ -28,7 +28,7 @@ export async function signUpAction(formState: FormState, formData: FormData): Pr
     await setJWTSessionHeader(accessToken, refreshToken)
     console.log(`User with id=${user.id} logged in`);
 
-    redirect("/dashboard");
+    redirect("/home");
 }
 
 export async function checkEmailAvailable(email: string) {

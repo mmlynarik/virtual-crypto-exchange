@@ -2,7 +2,7 @@ import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
 import {cookies} from "next/headers";
 import {NextRequest, NextResponse} from "next/server";
 
-const protectedRoutes = ["/dashboard"];
+const protectedRoutes = ["/home"];
 const publicRoutes = ["/login", "/signup", "/"];
 
 async function authMiddleware(req: NextRequest) {
@@ -30,7 +30,7 @@ async function authMiddleware(req: NextRequest) {
         return NextResponse.next();
     }
     if (isPublicRoute && authenticated) {
-        return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
+        return NextResponse.redirect(new URL("/home", req.nextUrl));
     }
     return NextResponse.next();
 }
