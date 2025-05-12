@@ -1,7 +1,7 @@
 # Virtual Crypto Exchange Full Stack Project
 
 ## Website
-This project can be found at [www.mmlynarik.com](https://www.mmlynarik.com)
+This project can be found at [mmlynarik.com](https://mmlynarik.com)
 
 
 ## Features
