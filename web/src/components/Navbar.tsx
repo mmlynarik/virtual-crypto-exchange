@@ -48,7 +48,7 @@ export default function NavBar() {
                     <NavItem Icon={House} name="Home" href="/home" />
                     <NavItem Icon={ChartPie} name="My assets" href="/assets" />
                     <NavItem Icon={ReceiptText} name="Transactions" href="/transactions" />
-                    <NavItem Icon={ReceiptText} name="Transactions" href="/transactions" hasMargin={true} />
+                    <NavItem Icon={ReceiptText} name="Sign out" href="/transactions" hasMargin={true} />
                 </div>
             </div>
         </nav>
