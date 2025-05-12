@@ -1,5 +1,5 @@
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function NextImageLink() {
     return (
@@ -7,7 +7,7 @@ export default function NextImageLink() {
             Powered by
             <Image
                 className="dark:invert"
-                src="/nextjs-icon.svg"
+                src="/next-js.png"
                 alt="Next.js logo"
                 width={32}
                 height={32}
