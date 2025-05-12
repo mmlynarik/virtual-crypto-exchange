@@ -1,18 +1,20 @@
-import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
+// import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
 import {cookies} from "next/headers";
 import {NextRequest, NextResponse} from "next/server";
 
-const publicRoutes = ["/login", "/signup", "/"];
+// const publicRoutes = ["/login", "/signup", "/"];
 
 async function authMiddleware(req: NextRequest) {
     const path = req.nextUrl.pathname;
-    const isProtectedRoute = !publicRoutes.includes(path);
-    const isPublicRoute = publicRoutes.includes(path);
+    // const isProtectedRoute = !publicRoutes.includes(path);
+    // const isPublicRoute = publicRoutes.includes(path);
 
     const cookieStore = await cookies();
     console.log(cookieStore)
     const access_token = cookieStore.get("access")?.value;
-    const authenticated = await IsTokenOK(access_token);
+    console.log(access_token)
+    console.log(path)
+    // const authenticated = await IsTokenOK(access_token);
 
     // if (isProtectedRoute && !authenticated) {
     //     const token = cookieStore.get("refresh")?.value;
