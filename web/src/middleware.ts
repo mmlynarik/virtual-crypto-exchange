@@ -1,39 +1,36 @@
-// import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
+import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
 import {cookies} from "next/headers";
 import {NextRequest, NextResponse} from "next/server";
 
-// const publicRoutes = ["/login", "/signup", "/"];
+const publicRoutes = ["/login", "/signup", "/"];
 
 async function authMiddleware(req: NextRequest) {
     const path = req.nextUrl.pathname;
-    // const isProtectedRoute = !publicRoutes.includes(path);
-    // const isPublicRoute = publicRoutes.includes(path);
+    const isProtectedRoute = !publicRoutes.includes(path);
+    const isPublicRoute = publicRoutes.includes(path);
 
     const cookieStore = await cookies();
-    console.log(cookieStore)
     const access_token = cookieStore.get("access")?.value;
-    console.log(access_token)
-    console.log(path)
-    // const authenticated = await IsTokenOK(access_token);
+    const authenticated = await IsTokenOK(access_token);
 
-    // if (isProtectedRoute && !authenticated) {
-    //     const token = cookieStore.get("refresh")?.value;
-    //     const res = await fetch(`${req.nextUrl.origin}/api/token/refresh`, {
-    //         method: "POST",
-    //         body: JSON.stringify({refreshToken: token}),
-    //         headers: {Accept: "application/json"},
-    //     });
-    //     if (!res.ok) {
-    //         return NextResponse.redirect(new URL("/login", req.nextUrl));
-    //     }
-    //     const {accessToken, refreshToken} = await res.json();
-    //     setJWTSessionHeader(accessToken, refreshToken);
-    //     console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
-    //     return NextResponse.next();
-    // }
-    // if (isPublicRoute && authenticated) {
-    //     return NextResponse.redirect(new URL("/home", req.nextUrl));
-    // }
+    if (isProtectedRoute && !authenticated) {
+        const token = cookieStore.get("refresh")?.value;
+        const res = await fetch(`http://${req.nextUrl.host}/api/token/refresh`, {
+            method: "POST",
+            body: JSON.stringify({refreshToken: token}),
+            headers: {Accept: "application/json"},
+        });
+        if (!res.ok) {
+            return NextResponse.redirect(new URL("/login", req.nextUrl));
+        }
+        const {accessToken, refreshToken} = await res.json();
+        setJWTSessionHeader(accessToken, refreshToken);
+        console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
+        return NextResponse.next();
+    }
+    if (isPublicRoute && authenticated) {
+        return NextResponse.redirect(new URL("/home", req.nextUrl));
+    }
     return NextResponse.next();
 }
 
