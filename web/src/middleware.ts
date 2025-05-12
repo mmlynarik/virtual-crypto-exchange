@@ -10,6 +10,7 @@ async function authMiddleware(req: NextRequest) {
     const isPublicRoute = publicRoutes.includes(path);
 
     const cookieStore = await cookies();
+    console.log(cookieStore)
     const access_token = cookieStore.get("access")?.value;
     const authenticated = await IsTokenOK(access_token);
 
