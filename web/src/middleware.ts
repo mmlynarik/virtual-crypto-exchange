@@ -2,7 +2,7 @@ import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
 import {cookies} from "next/headers";
 import {NextRequest, NextResponse} from "next/server";
 
-const protectedRoutes = ["/home", "/transations", "/assets"];
+const protectedRoutes = ["/home", "/transactions", "/assets"];
 const publicRoutes = ["/login", "/signup", "/"];
 
 async function authMiddleware(req: NextRequest) {
