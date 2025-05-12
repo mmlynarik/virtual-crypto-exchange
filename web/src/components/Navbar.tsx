@@ -1,10 +1,10 @@
 "use client";
 // import LogoutButton from "@/components/LogoutButton";
+import { ChartPie, House, LucideProps, ReceiptText } from "lucide-react";
 import Image from "next/image";
-import {House, ChartPie, ReceiptText, LucideProps} from "lucide-react";
-import {ComponentType} from "react";
 import Link from "next/link";
-import {usePathname} from "next/navigation";
+import { usePathname } from "next/navigation";
+import { ComponentType } from "react";
 
 {
     /* grip ellipsis-vertical bell */
@@ -37,14 +37,14 @@ function CoinbaseLogo() {
 
 export default function NavBar() {
     return (
-        <nav className="w-60 border-r-1 p-3.25">
-            <div className="flex flex-col h-screen">
+        <nav className="w-60 border-r-1 p-3.25 h-screen">
+            <div className="flex flex-col h-full">
                 <div className="mr-auto pt-3 pb-9 pl-3">
                     <Link href="/home">
                         <CoinbaseLogo />
                     </Link>
                 </div>
-                <div className="flex h-8/9 flex-col gap-1">
+                <div className="flex h-full flex-col gap-1">
                     <NavItem Icon={House} name="Home" href="/home" />
                     <NavItem Icon={ChartPie} name="My assets" href="/assets" />
                     <NavItem Icon={ReceiptText} name="Transactions" href="/transactions" />
