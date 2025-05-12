@@ -11,28 +11,27 @@ async function authMiddleware(req: NextRequest) {
 
     const cookieStore = await cookies();
     console.log(cookieStore)
-    // const access_token = cookieStore.get("access")?.value;
-    const access_token = req.cookies.get("access")?.value;
+    const access_token = cookieStore.get("access")?.value;
     const authenticated = await IsTokenOK(access_token);
 
-    if (isProtectedRoute && !authenticated) {
-        const token = req.cookies.get("refresh")?.value;
-        const res = await fetch(`${req.nextUrl.origin}/api/token/refresh`, {
-            method: "POST",
-            body: JSON.stringify({refreshToken: token}),
-            headers: {Accept: "application/json"},
-        });
-        if (!res.ok) {
-            return NextResponse.redirect(new URL("/login", req.nextUrl));
-        }
-        const {accessToken, refreshToken} = await res.json();
-        setJWTSessionHeader(accessToken, refreshToken);
-        console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
-        return NextResponse.next();
-    }
-    if (isPublicRoute && authenticated) {
-        return NextResponse.redirect(new URL("/home", req.nextUrl));
-    }
+    // if (isProtectedRoute && !authenticated) {
+    //     const token = cookieStore.get("refresh")?.value;
+    //     const res = await fetch(`${req.nextUrl.origin}/api/token/refresh`, {
+    //         method: "POST",
+    //         body: JSON.stringify({refreshToken: token}),
+    //         headers: {Accept: "application/json"},
+    //     });
+    //     if (!res.ok) {
+    //         return NextResponse.redirect(new URL("/login", req.nextUrl));
+    //     }
+    //     const {accessToken, refreshToken} = await res.json();
+    //     setJWTSessionHeader(accessToken, refreshToken);
+    //     console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
+    //     return NextResponse.next();
+    // }
+    // if (isPublicRoute && authenticated) {
+    //     return NextResponse.redirect(new URL("/home", req.nextUrl));
+    // }
     return NextResponse.next();
 }
 
