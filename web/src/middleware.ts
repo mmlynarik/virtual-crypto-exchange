@@ -11,11 +11,12 @@ async function authMiddleware(req: NextRequest) {
 
     const cookieStore = await cookies();
     console.log(cookieStore)
-    const access_token = cookieStore.get("access")?.value;
+    // const access_token = cookieStore.get("access")?.value;
+    const access_token = req.cookies.get("access")?.value;
     const authenticated = await IsTokenOK(access_token);
 
     if (isProtectedRoute && !authenticated) {
-        const token = cookieStore.get("refresh")?.value;
+        const token = req.cookies.get("refresh")?.value;
         const res = await fetch(`${req.nextUrl.origin}/api/token/refresh`, {
             method: "POST",
             body: JSON.stringify({refreshToken: token}),
