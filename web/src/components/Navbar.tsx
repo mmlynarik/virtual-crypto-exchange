@@ -5,15 +5,29 @@ import Image from "next/image";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {ComponentType} from "react";
+import {logout} from "@/lib/actions/logout";
+import {Button} from "./ui/button";
 
 {
     /* grip ellipsis-vertical bell */
 }
 
+function NavItemButton({Icon, name}: NavItemProps) {
+    return (
+        <Button
+            onClick={async () => await logout()}
+            className="mt-auto mb-2 ml-1 flex cursor-pointer justify-start gap-3 rounded-full bg-red-50 py-7 hover:bg-red-100 active:bg-red-200"
+        >
+            <div className="px-1">{<Icon color="red" />}</div>
+            <span className="font-bold text-red-500">{name}</span>
+        </Button>
+    );
+}
+
 type NavItemProps = {
     Icon: ComponentType<LucideProps>;
     name: string;
-    href: string;
+    href?: string;
     hasMargin?: boolean;
 };
 
@@ -22,11 +36,11 @@ function NavItem({Icon, name, href, hasMargin}: NavItemProps) {
     const isActive = (href: string) => href === pathname;
     return (
         <Link
-            href={href}
-            className={`flex gap-4 ${isActive(href) ? "bg-sky-50" : ""} ${hasMargin ? "mt-auto" : ""} rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
+            href={href!}
+            className={`flex gap-4 ${isActive(href!) ? "bg-sky-50" : ""} ${hasMargin ? "mt-auto" : ""} rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
         >
-            {<Icon color={`${isActive(href) ? "#0084d1" : "black"}`} />}
-            <span className={`${isActive(href) ? "text-sky-600" : ""} font-bold`}>{name}</span>
+            {<Icon color={`${isActive(href!) ? "#0084d1" : "black"}`} />}
+            <span className={`${isActive(href!) ? "text-sky-600" : ""} font-bold`}>{name}</span>
         </Link>
     );
 }
@@ -48,7 +62,7 @@ export default function NavBar() {
                     <NavItem Icon={House} name="Home" href="/home" />
                     <NavItem Icon={ChartPie} name="My assets" href="/assets" />
                     <NavItem Icon={ReceiptText} name="Transactions" href="/transactions" />
-                    <NavItem Icon={LogOut} name="Sign out" href="/transactions" hasMargin={true} />
+                    <NavItemButton Icon={LogOut} name="Sign out" />
                 </div>
             </div>
         </nav>
