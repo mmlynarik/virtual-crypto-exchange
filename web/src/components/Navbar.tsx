@@ -12,7 +12,20 @@ import {Button} from "./ui/button";
     /* grip ellipsis-vertical bell */
 }
 
-function NavItemButton({Icon, name}: NavItemProps) {
+type NavLinkProps = {
+    Icon: ComponentType<LucideProps>;
+    name: string;
+    href: string;
+    hasMargin?: boolean;
+};
+
+type NavLogoutButtonProps = {
+    Icon: ComponentType<LucideProps>;
+    name: string;
+};
+
+
+function NavLogoutButton({Icon, name}: NavLogoutButtonProps) {
     return (
         <Button
             onClick={async () => await logout()}
@@ -24,14 +37,7 @@ function NavItemButton({Icon, name}: NavItemProps) {
     );
 }
 
-type NavItemProps = {
-    Icon: ComponentType<LucideProps>;
-    name: string;
-    href?: string;
-    hasMargin?: boolean;
-};
-
-function NavItem({Icon, name, href, hasMargin}: NavItemProps) {
+function NavLink({Icon, name, href, hasMargin}: NavLinkProps) {
     const pathname = usePathname();
     const isActive = (href: string) => href === pathname;
     return (
@@ -59,10 +65,10 @@ export default function NavBar() {
                     </Link>
                 </div>
                 <div className="flex h-full flex-col gap-1">
-                    <NavItem Icon={House} name="Home" href="/home" />
-                    <NavItem Icon={ChartPie} name="My assets" href="/assets" />
-                    <NavItem Icon={ReceiptText} name="Transactions" href="/transactions" />
-                    <NavItemButton Icon={LogOut} name="Sign out" />
+                    <NavLink Icon={House} name="Home" href="/home" />
+                    <NavLink Icon={ChartPie} name="My assets" href="/assets" />
+                    <NavLink Icon={ReceiptText} name="Transactions" href="/transactions" />
+                    <NavLogoutButton Icon={LogOut} name="Sign out" />
                 </div>
             </div>
         </nav>
