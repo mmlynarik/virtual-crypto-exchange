@@ -20,6 +20,7 @@ async function authMiddleware(req: NextRequest) {
     if (isPublicRoute && authenticated) {
         return NextResponse.redirect(new URL("/home", req.nextUrl));
     }
+    
     return NextResponse.next();
 }
 
