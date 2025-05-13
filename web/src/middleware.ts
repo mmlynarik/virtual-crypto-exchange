@@ -1,4 +1,4 @@
-import {IsTokenOK, setJWTSessionHeader} from "@/lib/auth/jwtSession";
+import {isAuthenticated} from "@/lib/auth/jwtSession";
 import {cookies} from "next/headers";
 import {NextRequest, NextResponse} from "next/server";
 
@@ -10,23 +10,12 @@ async function authMiddleware(req: NextRequest) {
     const isPublicRoute = publicRoutes.includes(path);
 
     const cookieStore = await cookies();
-    const access_token = cookieStore.get("access")?.value;
-    const authenticated = await IsTokenOK(access_token);
+    const accessToken = cookieStore.get("access")?.value;
+    const refreshToken = cookieStore.get("refresh")?.value;
+    const authenticated = await isAuthenticated(req, accessToken, refreshToken);
 
     if (isProtectedRoute && !authenticated) {
-        const token = cookieStore.get("refresh")?.value;
-        const res = await fetch(`http://${req.nextUrl.host}/api/token/refresh`, {
-            method: "POST",
-            body: JSON.stringify({refreshToken: token}),
-            headers: {Accept: "application/json"},
-        });
-        if (!res.ok) {
-            return NextResponse.redirect(new URL("/login", req.nextUrl));
-        }
-        const {accessToken, refreshToken} = await res.json();
-        setJWTSessionHeader(accessToken, refreshToken);
-        console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
-        return NextResponse.next();
+        return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
     if (isPublicRoute && authenticated) {
         return NextResponse.redirect(new URL("/home", req.nextUrl));

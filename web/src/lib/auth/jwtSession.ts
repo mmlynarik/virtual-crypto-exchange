@@ -4,9 +4,10 @@ import {
     JWT_REFRESH_TOKEN_EXPIRY_SECONDS,
     JWT_SECRET_KEY,
 } from "@/config";
-import { JWTPrivateClaims, jwtSchema } from "@/lib/schemas/jwt";
-import { JWTPayload, SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import {JWTPrivateClaims, jwtSchema} from "@/lib/schemas/jwt";
+import {JWTPayload, SignJWT, jwtVerify} from "jose";
+import {cookies} from "next/headers";
+import {NextRequest} from "next/server";
 import "server-only";
 
 const JWT_SECRET_KEY_ENCODED = new TextEncoder().encode(JWT_SECRET_KEY);
@@ -33,6 +34,21 @@ export async function validateJWT(payload: JWTPayload) {
     return await jwtSchema.safeParseAsync(payload);
 }
 
+export async function refreshAccessToken(req: NextRequest, currentRefreshToken: string | undefined) {
+    const res = await fetch(`http://${req.nextUrl.host}/api/token/refresh`, {
+        method: "POST",
+        body: JSON.stringify({refreshToken: currentRefreshToken}),
+        headers: {Accept: "application/json"},
+    });
+    if (!res.ok) {
+        return false;
+    }
+    const {accessToken, refreshToken} = await res.json();
+    setJWTSessionHeader(accessToken, refreshToken);
+    console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
+    return true;
+}
+
 export async function IsTokenOK(token: string | undefined): Promise<boolean> {
     if (!token) {
         return false;
@@ -42,6 +58,18 @@ export async function IsTokenOK(token: string | undefined): Promise<boolean> {
         return false;
     }
     return (await validateJWT(payload)).success;
+}
+
+export async function isAuthenticated(
+    req: NextRequest,
+    accessToken: string | undefined,
+    refreshToken: string | undefined
+) {
+    const accessTokenOk = await IsTokenOK(accessToken);
+    if (accessTokenOk) {
+        return true;
+    }
+    return await refreshAccessToken(req, refreshToken);
 }
 
 export async function createJWTSession(userId: number) {
