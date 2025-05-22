@@ -1,5 +1,5 @@
 "use client";
-// import LogoutButton from "@/components/LogoutButton";
+
 import {
     ChartPie,
     House,
@@ -65,7 +65,7 @@ function CoinbaseLogo() {
 
 export default function NavBar() {
     return (
-        <nav className="h-screen w-60 border-r-1 p-3.25">
+        <nav className="flex h-screen w-60 shrink-0 border-r-1 p-3.25">
             <div className="flex h-full flex-col">
                 <div className="mr-auto pt-3 pb-9 pl-3">
                     <Link href="/home">
