@@ -49,7 +49,7 @@ function NavLink({Icon, name, href}: NavLinkProps) {
     return (
         <Link
             href={href}
-            className={`flex gap-4 ${isActive(href) ? "bg-sky-50" : ""} rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
+            className={`flex gap-4 ${isActive(href) ? "bg-sky-50" : ""} w-52 rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
         >
             {<Icon color={`${isActive(href) ? "#0084d1" : "black"}`} />}
             <span className={`${isActive(href) ? "text-sky-600" : ""} font-bold`}>{name}</span>
