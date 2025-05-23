@@ -13,7 +13,7 @@ export default function Header() {
                 <div className="flex grow justify-start">
                     <Title />
                 </div>
-                <div className="flex gap-x-2.25 pt-0.25 pr-4.25">
+                <div className="flex gap-x-2.25 pt-0.25 pr-4">
                     <Button className="size-[40px] cursor-pointer rounded-full bg-gray-200 hover:bg-gray-300">
                         <FaRegBell color="black" />
                     </Button>
