@@ -19,8 +19,6 @@ import {ComponentType} from "react";
 import {logout} from "@/lib/actions/logout";
 import {Button} from "./ui/button";
 
-/* grip bell */
-
 type NavLinkProps = {
     Icon: ComponentType<LucideProps>;
     name: string;
@@ -50,11 +48,11 @@ function NavLink({Icon, name, href}: NavLinkProps) {
     const isActive = (href: string) => href === pathname;
     return (
         <Link
-            href={href!}
-            className={`flex gap-4 ${isActive(href!) ? "bg-sky-50" : ""} rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
+            href={href}
+            className={`flex gap-4 ${isActive(href) ? "bg-sky-50" : ""} rounded-full p-4 hover:bg-slate-100 active:bg-slate-200`}
         >
-            {<Icon color={`${isActive(href!) ? "#0084d1" : "black"}`} />}
-            <span className={`${isActive(href!) ? "text-sky-600" : ""} font-bold`}>{name}</span>
+            {<Icon color={`${isActive(href) ? "#0084d1" : "black"}`} />}
+            <span className={`${isActive(href) ? "text-sky-600" : ""} font-bold`}>{name}</span>
         </Link>
     );
 }
