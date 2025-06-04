@@ -7,7 +7,7 @@ runprod:
 	docker-compose -f docker-compose-prod.yaml up
 
 rmprod:
-	docker-compose -f docker-compose-prod.yaml rm --force
+	docker-compose -f docker-compose-prod.yaml rm --force --stop
 
 fe:
 	cd web && npm run dev
