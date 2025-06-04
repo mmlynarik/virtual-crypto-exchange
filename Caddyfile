@@ -1,3 +1,7 @@
 mmlynarik.com:443 {
     reverse_proxy web:3000
 }
+
+pokedex.mmlynarik.com:443 {
+    reverse_proxy django:9000
+}
