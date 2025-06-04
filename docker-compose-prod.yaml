@@ -49,7 +49,7 @@ services:
       - db
     restart: always
     networks:
-      - pokedex
+      - caddy
 
   web:
     image: docker.io/miromlynarik/vce-web:prod
