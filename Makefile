@@ -19,7 +19,7 @@ be:
 	cd api && fastapi dev --host "0.0.0.0" --port 8000 --reload src/vce/app.py
 
 rmc:
- 	docker rm -vf $$(docker ps -aq)
+	docker rm -vf $$(docker ps -aq)
 
 rmi:
 	docker rmi -f $$(docker images -aq)
