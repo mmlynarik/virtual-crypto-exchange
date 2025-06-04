@@ -44,7 +44,7 @@ services:
       - DJANGO_SUPERUSER_USER=admin
       - DJANGO_SUPERUSER_EMAIL=
     ports:
-      - 9000:9000
+      - 9000:8000
     depends_on:
       - db
     restart: always
