@@ -32,7 +32,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   django:
-    image: docker.io/mmlynarik/pokedex-api:prod
+    image: docker.io/miro-mlynarik/pokedex-api:prod
     container_name: django
     environment:
       - BACKEND_DB_USER=postgres
