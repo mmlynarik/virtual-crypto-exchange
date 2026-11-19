@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     start_orm_mappers()
     await create_db_and_tables()
     yield
-    HTTPClient.aclose()
+    HTTPClient.aclose()  # type: ignore
 
 
 app = FastAPI(root_path="/api", lifespan=lifespan, title="CoinGecko Crypto API")
