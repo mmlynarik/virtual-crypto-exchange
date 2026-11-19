@@ -16,10 +16,11 @@ from vce.coingecko import (
     CoinNotFound,
     InvalidCoinSymbol,
 )
-from vce.di import HTTPClient, get_db_session, get_http_client
+from vce.di import engine, get_db_session, get_http_client
 from vce.orm import create_db_and_tables, start_orm_mappers
 from vce.repository import CGCoinRepository, UsersRepository
 from vce.services import add_coins, delete_coin, get_coins, refresh_coins, update_coin
+from vce.settings import CG_API_URL
 from vce.users import User, UserAlreadyExists, UserCreateByEmail, UserCreateByGithub, UserCreated
 
 
@@ -27,8 +28,10 @@ from vce.users import User, UserAlreadyExists, UserCreateByEmail, UserCreateByGi
 async def lifespan(app: FastAPI):
     start_orm_mappers()
     await create_db_and_tables()
-    yield
-    HTTPClient.aclose()  # type: ignore
+    async with AsyncClient(base_url=CG_API_URL) as client:
+        app.state.http_client = client
+        yield
+    await engine.dispose()
 
 
 app = FastAPI(root_path="/api", lifespan=lifespan, title="CoinGecko Crypto API")
@@ -68,18 +71,14 @@ async def get_coins_from_symbol(symbol: str, session: DBSessionDep) -> list[CGCo
 
 
 @app.post("/coins", status_code=201)
-async def add_coins_from_symbol(
-    coin: CGCoinCreate, session: DBSessionDep, client: HTTPClientDep
-) -> list[CGCoin]:
+async def add_coins_from_symbol(coin: CGCoinCreate, session: DBSessionDep, client: HTTPClientDep) -> list[CGCoin]:
     repo = CGCoinRepository(session)
     try:
         coins = await add_coins(coin, repo, session, client)
     except InvalidCoinSymbol:
         raise HTTPException(status_code=422, detail=f"Coin symbol {coin.symbol} is not valid")
     except CoinAlreadyExists:
-        raise HTTPException(
-            status_code=422, detail=f"Coins with symbol {coin.symbol} already exist in database"
-        )
+        raise HTTPException(status_code=422, detail=f"Coins with symbol {coin.symbol} already exist in database")
     return coins
 
 
@@ -104,9 +103,7 @@ async def update_coin_from_id(id: str, new_coin_values: CGCoinUpdate, session: D
 
 
 @app.get("/coins/refresh/all")
-async def refresh_market_data(
-    background_tasks: BackgroundTasks, session: DBSessionDep, client: HTTPClientDep
-):
+async def refresh_market_data(background_tasks: BackgroundTasks, session: DBSessionDep, client: HTTPClientDep):
     repo = CGCoinRepository(session)
     background_tasks.add_task(refresh_coins, repo=repo, session=session, client=client)
     return {"message": "Coins' market data update started in the background"}
@@ -128,9 +125,7 @@ async def register_user_by_github(user_create: UserCreateByGithub, session: DBSe
     try:
         user = await services.register_user_by_github(user_create=user_create, repo=repo, session=session)
     except UserAlreadyExists:
-        raise HTTPException(
-            status_code=409, detail=f"User with github_id {user_create.github_id} already exists"
-        )
+        raise HTTPException(status_code=409, detail=f"User with github_id {user_create.github_id} already exists")
     return user
 
 

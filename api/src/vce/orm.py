@@ -36,6 +36,8 @@ user = Table(
 
 
 def start_orm_mappers():
+    if mapper_registry.mappers:
+        return
     mapper_registry.map_imperatively(CGCoin, cg_coin)
     mapper_registry.map_imperatively(User, user)
 
