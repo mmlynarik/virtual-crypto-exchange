@@ -1,13 +1,13 @@
 .PHONY: runprod rmprod db api ui
 
 rundev:
-	docker-compose -f docker-compose-dev.yaml up
+	docker compose -f docker-compose-dev.yaml up
 
 runprod:
-	docker-compose -f docker-compose-prod.yaml up
+	docker compose -f docker-compose-prod.yaml up
 
 rmprod:
-	docker-compose -f docker-compose-prod.yaml rm --force --stop
+	docker compose -f docker-compose-prod.yaml rm --force --stop
 
 fe:
 	cd web && npm run dev
