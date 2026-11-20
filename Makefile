@@ -23,3 +23,6 @@ rmc:
 
 rmi:
 	docker rmi -f $$(docker images -aq)
+
+makemigrations:
+	alembic revision --autogenerate -m "add user created_at" --rev-id 0003

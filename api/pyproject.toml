@@ -6,11 +6,13 @@ readme = "README.md"
 authors = [
     { name = "Miroslav Mlynarik", email = "miroslav.mlynarik@gmail.com" }
 ]
-requires-python = "==3.13.*"
+requires-python = "==3.14.*"
 dependencies = [
+    "alembic>=1.20.1",
     "asyncpg>=0.30.0",
     "fastapi[standard]>=0.115.8",
     "httpx>=0.28.1",
+    "pyjwt>=2.15.1",
     "sqlalchemy[asyncio]>=2.0.38",
 ]
 
@@ -26,6 +28,7 @@ dev = [
 
 [project.scripts]
 vce = "vce:main"
+vce-migrate = "vce.scripts.migrate:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -38,12 +41,16 @@ packages = ["src/vce"]
 line-length = 110
 exclude = ["experimental/", ".venv"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["vce"]
+
 [tool.black]
 line-length = 110
 
 [tool.isort]
 profile = "black"
 line_length = 110
+known_first_party = ["vce"]
 
 [tool.mypy]
 ignore_missing_imports = true

@@ -1,47 +1,36 @@
-from sqlalchemy import Column, DateTime, Float, Integer, String, Table
-from sqlalchemy.orm import registry
+from sqlalchemy.orm import registry, relationship
 
-from vce.coingecko import CGCoin
-from vce.di import engine
-from vce.users import User
+from vce.auth.domain import RefreshToken
+from vce.auth.orm import refresh_token
+from vce.coin.domain import CGCoin
+from vce.coin.orm import cg_coin
+from vce.db import metadata
+from vce.user.domain import User
+from vce.user.orm import user
 
-mapper_registry = registry()
-
-
-cg_coin = Table(
-    "cg_coin",
-    mapper_registry.metadata,
-    Column("id", String(256), primary_key=True),
-    Column("name", String(256)),
-    Column("symbol", String(30)),
-    Column("current_price", Float),
-    Column("market_cap", Float),
-    Column("circulating_supply", Float),
-    Column("total_supply", Float),
-    Column("max_supply", Float),
-    Column("last_updated", DateTime(timezone=True)),
-)
-
-
-user = Table(
-    "user",
-    mapper_registry.metadata,
-    Column("id", Integer, primary_key=True),
-    Column("email", String(256)),
-    Column("password", String(256)),
-    Column("salt", String(64)),
-    Column("github_id", Integer),
-    Column("github_name", String(64)),
-)
+mapper_registry = registry(metadata=metadata)
 
 
 def start_orm_mappers():
+    """Map the domain classes to their tables. Must run before any ORM use (done in the app lifespan)."""
     if mapper_registry.mappers:
         return
     mapper_registry.map_imperatively(CGCoin, cg_coin)
-    mapper_registry.map_imperatively(User, user)
-
-
-async def create_db_and_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(mapper_registry.metadata.create_all)
+    mapper_registry.map_imperatively(
+        User,
+        user,
+        properties={
+            "refresh_tokens": relationship(
+                RefreshToken,
+                back_populates="user",
+                cascade="all, delete-orphan",
+                passive_deletes=True,
+                lazy="raise",
+            ),
+        },
+    )
+    mapper_registry.map_imperatively(
+        RefreshToken,
+        refresh_token,
+        properties={"user": relationship(User, back_populates="refresh_tokens", lazy="raise")},
+    )

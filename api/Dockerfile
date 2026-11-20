@@ -1,4 +1,4 @@
-FROM python:3.13.2-slim AS base
+FROM python:3.14.7-slim AS base
 
 RUN apt-get update --fix-missing && \
     apt-get install -y --no-install-recommends \
@@ -42,15 +42,17 @@ RUN --mount=type=cache,target=/root/.cache \
     uv sync --locked
 
 
-FROM python:3.13.2-slim AS dev
+FROM python:3.14.7-slim AS dev
 WORKDIR /app
 COPY --from=builder-dev /app /app
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["fastapi", "dev", "--host", "0.0.0.0", "--port", "8000", "--reload", "src/vce/app.py"]
+# Apply DB migrations, then start the app (exec: fastapi becomes PID 1 and receives signals)
+CMD ["sh", "-c", "vce-migrate && exec fastapi dev --host 0.0.0.0 --port 8000 --reload src/vce/app.py"]
 
 
-FROM python:3.13.2-slim AS prod
+FROM python:3.14.7-slim AS prod
 WORKDIR /app
 COPY --from=builder-prod /app /app
 ENV PATH="/app/.venv/bin/:$PATH"
-CMD ["fastapi", "run", "--host", "0.0.0.0", "--port", "8000", ".venv/lib/python3.13/site-packages/vce/app.py"]
+# Apply DB migrations, then start the app (exec: fastapi becomes PID 1 and receives signals)
+CMD ["sh", "-c", "vce-migrate && exec fastapi run --host 0.0.0.0 --port 8000 .venv/lib/python3.14/site-packages/vce/app.py"]

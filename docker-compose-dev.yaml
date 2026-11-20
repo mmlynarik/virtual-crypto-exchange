@@ -23,6 +23,9 @@ services:
       - BACKEND_DB_NAME=postgres
       - BACKEND_DB_PASSWORD=postgres
       - BACKEND_DB_HOST=db
+      - JWT_SECRET_KEY=G349D3/i12FVOZ2QyvQ8yZPTppgmw8XFBH6VTCkAofE=
+      - GITHUB_CLIENT_ID=Ov23li7Fta3hsirrob9c
+      - GITHUB_CLIENT_SECRET=1e1d22bf552e6980eba809e2a2a7eda12f548662
     ports:
       - 8000:8000
     depends_on:

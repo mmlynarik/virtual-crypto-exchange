@@ -2,17 +2,11 @@ from httpx import AsyncClient
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vce.coingecko import (
-    CGCoin,
-    CGCoinCreate,
-    CGCoinUpdate,
-    CoinAlreadyExists,
-    CoinNotFound,
-    get_coin_ids_from_symbol,
-    get_coins_data,
-)
-from vce.repository import CGCoinRepository, UsersRepository
-from vce.users import User, UserAlreadyExists, UserCreateByEmail, UserCreateByGithub, UserCreated
+from vce.coin.coingecko import get_coin_ids_from_symbol, get_coins_data
+from vce.coin.domain import CGCoin
+from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound
+from vce.coin.repository import CGCoinRepository
+from vce.coin.schemas import CGCoinCreate, CGCoinUpdate
 
 
 async def add_coins(
@@ -52,8 +46,8 @@ async def update_coin(
     if not current_coin:
         raise CoinNotFound(f"Coin with id {id} not found in database")
 
-    for attr in new_coin_values.__dict__:
-        setattr(current_coin, attr, getattr(new_coin_values, attr))
+    for attr, value in new_coin_values.model_dump().items():
+        setattr(current_coin, attr, value)
 
     await session.commit()
     return current_coin
@@ -82,55 +76,3 @@ async def refresh_coins(repo: CGCoinRepository, session: AsyncSession, client: A
         ],
     )
     await session.commit()
-
-
-async def get_user_by_email(email: str, repo: UsersRepository) -> User | None:
-    return await repo.get_by_email(email=email)
-
-
-async def get_user_by_id(id: int, repo: UsersRepository) -> User | None:
-    return await repo.get_by_id(id=id)
-
-
-async def get_user_by_github_id(github_id: int, repo: UsersRepository) -> User | None:
-    return await repo.get_by_github_id(github_id=github_id)
-
-
-async def register_user_by_email(
-    user_create: UserCreateByEmail, repo: UsersRepository, session: AsyncSession
-) -> UserCreated:
-    existing_user = await get_user_by_email(user_create.email, repo=repo)
-    if existing_user:
-        raise UserAlreadyExists
-    user = User(
-        id=None,
-        email=user_create.email,
-        password=user_create.password,
-        salt=user_create.salt,
-        github_id=None,
-        github_name=None,
-    )
-    await repo.add(user=user)
-    await session.commit()
-    await session.refresh(user)
-    return UserCreated(user.id)  # type: ignore
-
-
-async def register_user_by_github(
-    user_create: UserCreateByGithub, repo: UsersRepository, session: AsyncSession
-) -> UserCreated:
-    existing_user = await get_user_by_github_id(user_create.github_id, repo=repo)
-    if existing_user:
-        raise UserAlreadyExists
-    user = User(
-        id=None,
-        email=None,
-        password=None,
-        salt=None,
-        github_id=user_create.github_id,
-        github_name=user_create.github_name,
-    )
-    await repo.add(user=user)
-    await session.commit()
-    await session.refresh(user)
-    return UserCreated(user.id)  # type: ignore

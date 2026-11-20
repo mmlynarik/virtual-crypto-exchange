@@ -1,51 +1,10 @@
-from dataclasses import dataclass
 from datetime import datetime
 
 from httpx import AsyncClient
 
+from vce.coin.domain import CGCoin
+from vce.coin.exceptions import InvalidCoinSymbol
 from vce.settings import VS_CURRENCY
-
-
-@dataclass
-class CGCoin:
-    id: str
-    name: str
-    symbol: str
-    current_price: float
-    market_cap: float
-    circulating_supply: float
-    total_supply: float
-    max_supply: float
-    last_updated: datetime | None
-
-
-@dataclass
-class CGCoinCreate:
-    symbol: str
-
-
-@dataclass
-class CGCoinUpdate:
-    name: str
-    symbol: str
-    current_price: float
-    market_cap: float
-    circulating_supply: float
-    total_supply: float
-    max_supply: float
-    last_updated: datetime
-
-
-class InvalidCoinSymbol(Exception):
-    pass
-
-
-class CoinAlreadyExists(Exception):
-    pass
-
-
-class CoinNotFound(Exception):
-    pass
 
 
 async def get_coin_ids_from_symbol(client: AsyncClient, symbol: str) -> list[str]:
