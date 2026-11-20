@@ -1,14 +1,12 @@
 import {z} from "zod";
 
-export const jwtSchema = z.object({
+// Claims of an access token issued by the backend (refresh tokens carry type "refresh" plus jti and fam)
+export const accessTokenSchema = z.object({
     userId: z.number(),
+    type: z.literal("access"),
     aud: z.literal("vce"),
     iat: z.number(),
     exp: z.number(),
 });
 
-export type JWTPrivateClaims = {
-    userId: number;
-};
-
-export type JWTSchema = z.infer<typeof jwtSchema>;
+export type AccessTokenClaims = z.infer<typeof accessTokenSchema>;

@@ -1,18 +1,22 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
+
+from vce.settings import EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH
+from vce.user.domain import normalize_email
+
+NewEmail = Annotated[EmailStr, Field(max_length=EMAIL_MAX_LENGTH), AfterValidator(normalize_email)]
+LoginEmail = Annotated[str, Field(max_length=EMAIL_MAX_LENGTH), AfterValidator(normalize_email)]
 
 
-class EmailCredentials(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
+class EmailRegisterCredentials(BaseModel):
+    email: NewEmail
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
 
-class LoginCredentials(BaseModel):
-    # Plain str on purpose: EmailStr normalizes the address (e.g. lowercases the domain), which could
-    # make an exact-match lookup miss users created before the backend owned registration.
-    email: str
-    password: str
+class EmailLoginCredentials(BaseModel):
+    email: LoginEmail
+    password: str = Field(max_length=PASSWORD_MAX_LENGTH)
 
 
 class GithubCode(BaseModel):
@@ -31,6 +35,10 @@ class TokenPair(BaseModel):
 
 class RegisterResponse(TokenPair):
     user_id: int
+
+
+class EmailAvailability(BaseModel):
+    available: bool
 
 
 class UserPublic(BaseModel):

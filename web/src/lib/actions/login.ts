@@ -1,10 +1,9 @@
 "use server";
 
 import {GITHUB_AUTHORIZE_URL} from "@/config";
+import {loginWithPassword} from "@/lib/auth/backend";
+import {setSessionCookies} from "@/lib/auth/jwtSession";
 import {redirect} from "next/navigation";
-import {createJWTSession, setJWTSessionHeader} from "../auth/jwtSession";
-import {verifyPassword} from "../auth/passwordHasher";
-import {getUserByEmail} from "../auth/user";
 import {loginSchema} from "../schemas/login";
 import {getFieldsFromFormData} from "../utils";
 
@@ -24,19 +23,12 @@ export async function loginAction(_: FormState, formData: FormData): Promise<For
         return {success: false, fields, errors};
     }
 
-    const user = await getUserByEmail(parsed.data.email);
-    if (!user) {
+    const tokens = await loginWithPassword(parsed.data.email, parsed.data.password);
+    if (!tokens) {
         return {success: false, errors: {root: ["Incorrect email or password"]}};
     }
 
-    const isVerifiedPassword = await verifyPassword(parsed.data.password, user.password, user.salt);
-    if (!isVerifiedPassword) {
-        return {success: false, errors: {root: ["Incorrect email or password"]}};
-    }
-
-    const {accessToken, refreshToken} = await createJWTSession(user.id);
-    await setJWTSessionHeader(accessToken, refreshToken);
-    console.log(`User with id=${user.id} logged in`);
+    await setSessionCookies(tokens);
     redirect("/home");
 }
 

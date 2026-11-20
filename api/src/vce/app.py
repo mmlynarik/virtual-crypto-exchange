@@ -11,7 +11,6 @@ from vce.auth.router import router as auth_router
 from vce.coin.router import router as coin_router
 from vce.orm import start_orm_mappers
 from vce.settings import BACKEND_DB_URL, CG_API_URL
-from vce.user.router import router as user_router
 
 
 @asynccontextmanager
@@ -46,7 +45,6 @@ app.add_middleware(
 )
 
 app.include_router(coin_router)
-app.include_router(user_router)
 app.include_router(auth_router)
 
 

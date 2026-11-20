@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from vce.auth.exceptions import InvalidCredentials, InvalidToken, RefreshTokenReused
 from vce.auth.github import exchange_code_for_token, get_github_user
 from vce.auth.repository import RefreshTokenRepository
-from vce.auth.schemas import EmailCredentials, LoginCredentials, RegisterResponse, TokenPair
+from vce.auth.schemas import EmailLoginCredentials, EmailRegisterCredentials, RegisterResponse, TokenPair
 from vce.auth.security import (
     create_access_token,
     create_refresh_token,
@@ -15,6 +15,7 @@ from vce.auth.security import (
     verify_password,
 )
 from vce.user.domain import User
+from vce.user.exceptions import UserAlreadyExists
 from vce.user.repository import UsersRepository
 from vce.user.schemas import UserCreateByEmail, UserCreateByGithub
 from vce.user.services import get_user_by_github_id, register_user_by_email, register_user_by_github
@@ -38,7 +39,10 @@ async def start_session(user_id: int, token_repo: RefreshTokenRepository, sessio
 
 
 async def register_with_password(
-    creds: EmailCredentials, repo: UsersRepository, token_repo: RefreshTokenRepository, session: AsyncSession
+    creds: EmailRegisterCredentials,
+    repo: UsersRepository,
+    token_repo: RefreshTokenRepository,
+    session: AsyncSession,
 ) -> RegisterResponse:
     salt = generate_salt()
     user_create = UserCreateByEmail(
@@ -50,8 +54,15 @@ async def register_with_password(
     return RegisterResponse(user_id=created.id, **tokens.model_dump())
 
 
+async def is_email_available(email: str, repo: UsersRepository) -> bool:
+    return await repo.get_by_email(email) is None
+
+
 async def login_with_password(
-    creds: LoginCredentials, repo: UsersRepository, token_repo: RefreshTokenRepository, session: AsyncSession
+    creds: EmailLoginCredentials,
+    repo: UsersRepository,
+    token_repo: RefreshTokenRepository,
+    session: AsyncSession,
 ) -> TokenPair:
     user = await repo.get_by_email(creds.email)
     if not user or user.password is None or user.salt is None:
@@ -77,8 +88,15 @@ async def login_with_github(
         user_id: int = user.id  # type: ignore[assignment]
     else:
         user_create = UserCreateByGithub(github_id=github_user.id, github_name=github_user.name)
-        user_id = (await register_user_by_github(user_create=user_create, repo=repo, session=session)).id
-        LOGGER.info("User with id=%s registered via GitHub", user_id)
+        try:
+            user_id = (await register_user_by_github(user_create=user_create, repo=repo, session=session)).id
+            LOGGER.info("User with id=%s registered via GitHub", user_id)
+        except UserAlreadyExists:
+            # A concurrent first login with the same GitHub account registered it a moment earlier
+            existing = await get_user_by_github_id(github_user.id, repo=repo)
+            if existing is None:
+                raise
+            user_id = existing.id  # type: ignore[assignment]
 
     LOGGER.info("User with id=%s logged in with GitHub", user_id)
     return await start_session(user_id, token_repo, session)

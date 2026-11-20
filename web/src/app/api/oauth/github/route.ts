@@ -1,21 +1,23 @@
-import {createJWTSession, setJWTSessionHeader} from "@/lib/auth/jwtSession";
-import {getGithubUser, getUserByGithubId, registerUserOnGithubLogin} from "@/lib/auth/user";
+import {loginWithGithub} from "@/lib/auth/backend";
+import {setSessionCookies} from "@/lib/auth/jwtSession";
 import {redirect} from "next/navigation";
 import {type NextRequest} from "next/server";
 
+// GitHub redirects here after the user authorizes the app. The backend exchanges the code for a GitHub
+// token, finds or creates the user, and returns our JWT pair.
 export async function GET(request: NextRequest) {
-    const queryParams = request.nextUrl.searchParams;
-    const code = queryParams.get("code")!;
-
-    let user;
-    const githubUser = await getGithubUser(code);
-    user = await getUserByGithubId(githubUser.id);
-    if (!user) {
-        user = await registerUserOnGithubLogin(githubUser);
+    const code = request.nextUrl.searchParams.get("code");
+    if (!code) {
+        // e.g. ?error=access_denied when the user cancels on GitHub
+        redirect("/login");
     }
-    const {accessToken, refreshToken} = await createJWTSession(user.id);
-    await setJWTSessionHeader(accessToken, refreshToken);
-    console.log(`User with id=${user.id} logged in`);
 
+    const tokens = await loginWithGithub(code);
+    if (!tokens) {
+        console.log("GitHub login rejected by backend");
+        redirect("/login");
+    }
+
+    await setSessionCookies(tokens);
     redirect("/home");
 }

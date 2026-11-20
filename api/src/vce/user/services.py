@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from vce.user.domain import User
@@ -10,12 +11,21 @@ async def get_user_by_email(email: str, repo: UsersRepository) -> User | None:
     return await repo.get_by_email(email=email)
 
 
-async def get_user_by_id(id: int, repo: UsersRepository) -> User | None:
-    return await repo.get_by_id(id=id)
-
-
 async def get_user_by_github_id(github_id: int, repo: UsersRepository) -> User | None:
     return await repo.get_by_github_id(github_id=github_id)
+
+
+async def _save_new_user(user: User, repo: UsersRepository, session: AsyncSession) -> UserCreated:
+    """Insert the user. A concurrent registration can pass the caller's existence check at the same time;
+    the unique constraints on email and github_id then reject the second insert."""
+    await repo.add(user=user)
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        raise UserAlreadyExists from e
+    await session.refresh(user)
+    return UserCreated(id=user.id)  # type: ignore
 
 
 async def register_user_by_email(
@@ -32,10 +42,7 @@ async def register_user_by_email(
         github_id=None,
         github_name=None,
     )
-    await repo.add(user=user)
-    await session.commit()
-    await session.refresh(user)
-    return UserCreated(id=user.id)  # type: ignore
+    return await _save_new_user(user, repo, session)
 
 
 async def register_user_by_github(
@@ -52,7 +59,4 @@ async def register_user_by_github(
         github_id=user_create.github_id,
         github_name=user_create.github_name,
     )
-    await repo.add(user=user)
-    await session.commit()
-    await session.refresh(user)
-    return UserCreated(id=user.id)  # type: ignore
+    return await _save_new_user(user, repo, session)

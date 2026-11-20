@@ -1,113 +1,78 @@
-import {
-    JWT_ACCESS_TOKEN_EXPIRY_SECONDS,
-    JWT_AUDIENCE,
-    JWT_REFRESH_TOKEN_EXPIRY_SECONDS,
-    JWT_SECRET_KEY,
-} from "@/config";
-import {JWTPrivateClaims, jwtSchema} from "@/lib/schemas/jwt";
-import {JWTPayload, SignJWT, jwtVerify} from "jose";
+import {TokenPair} from "@/lib/auth/backend";
+import {accessTokenSchema} from "@/lib/schemas/jwt";
+import {decodeJwt} from "jose";
 import {cookies} from "next/headers";
-import {NextRequest} from "next/server";
 import "server-only";
 
-const JWT_SECRET_KEY_ENCODED = new TextEncoder().encode(JWT_SECRET_KEY);
+export const ACCESS_COOKIE = "access";
+export const REFRESH_COOKIE = "refresh";
 
-export async function getSignedJWT(payload: JWTPrivateClaims, expiresAt: Date) {
-    return new SignJWT(payload)
-        .setProtectedHeader({alg: "HS256"})
-        .setIssuedAt()
-        .setExpirationTime(expiresAt)
-        .setAudience(JWT_AUDIENCE)
-        .sign(JWT_SECRET_KEY_ENCODED);
-}
+// Treat the access token as expired a little early, so one that passes here is still valid when the backend
+// checks it (request latency, clock skew between containers)
+const EXPIRY_LEEWAY_SECONDS = 30;
 
-export async function verifyJWT(token: string) {
-    try {
-        return (await jwtVerify(token, JWT_SECRET_KEY_ENCODED, {algorithms: ["HS256"]})).payload;
-    } catch (e) {
-        console.log(e);
-        return null;
-    }
-}
+type SessionCookie = {
+    name: string;
+    value: string;
+    options: {httpOnly: boolean; sameSite: "lax"; path: string; expires: Date};
+};
 
-export async function validateJWT(payload: JWTPayload) {
-    return await jwtSchema.safeParseAsync(payload);
-}
-
-export async function refreshAccessToken(req: NextRequest, currentRefreshToken: string | undefined) {
-    const res = await fetch(`http://${req.nextUrl.host}/api/token/refresh`, {
-        method: "POST",
-        body: JSON.stringify({refreshToken: currentRefreshToken}),
-        headers: {Accept: "application/json"},
-    });
-    if (!res.ok) {
-        return false;
-    }
-    const {accessToken, refreshToken} = await res.json();
-    setJWTSessionHeader(accessToken, refreshToken);
-    console.log(`Access token ${refreshToken ? "and refresh token " : ""}refreshed`);
-    return true;
-}
-
-export async function IsTokenOK(token: string | undefined): Promise<boolean> {
+/**
+ * Whether the access token looks usable: an access token with the expected claims that isn't (about to be)
+ * expired. The signature is NOT checked, since web doesn't hold the backend's signing secret. This only
+ * drives routing and refresh timing; the backend verifies the token on every API call (see backendApi.ts),
+ * so a forged cookie gets past the redirect but never gets any data.
+ */
+export function isAccessTokenUsable(token: string | undefined): boolean {
     if (!token) {
         return false;
     }
-    const payload = await verifyJWT(token);
-    if (!payload) {
+    let claims;
+    try {
+        claims = accessTokenSchema.safeParse(decodeJwt(token));
+    } catch {
+        // Not a JWT
         return false;
     }
-    return (await validateJWT(payload)).success;
+    return claims.success && claims.data.exp - EXPIRY_LEEWAY_SECONDS > Date.now() / 1000;
 }
 
-export async function isAuthenticated(
-    req: NextRequest,
-    accessToken: string | undefined,
-    refreshToken: string | undefined
-) {
-    const accessTokenOk = await IsTokenOK(accessToken);
-    if (accessTokenOk) {
-        return true;
+function getTokenExpiryDate(token: string): Date {
+    const {exp} = decodeJwt(token);
+    if (!exp) {
+        throw new Error("Token has no exp claim");
     }
-    return await refreshAccessToken(req, refreshToken);
+    return new Date(exp * 1000);
 }
 
-export async function createJWTSession(userId: number) {
-    const accessTokenExpiryDate = getTokenExpiryDate(JWT_ACCESS_TOKEN_EXPIRY_SECONDS);
-    const refreshTokenExpiryDate = getTokenExpiryDate(JWT_REFRESH_TOKEN_EXPIRY_SECONDS);
-
-    const accessToken = await getSignedJWT({userId}, accessTokenExpiryDate);
-    const refreshToken = await getSignedJWT({userId}, refreshTokenExpiryDate);
-
-    return {accessToken, refreshToken};
-}
-
-export async function setJWTSessionHeader(access_token: string, refresh_token: string | null = null) {
-    const cookieStore = await cookies();
-    cookieStore.set("access", access_token, {
-        httpOnly: true,
-        // secure: true,
-        expires: getTokenExpiryDate(JWT_ACCESS_TOKEN_EXPIRY_SECONDS),
-        sameSite: "lax",
-        path: "/",
-    });
-    if (refresh_token) {
-        cookieStore.set("refresh", refresh_token, {
+/** Cookies holding the token pair; each cookie expires together with its token. */
+export function getSessionCookies(tokens: TokenPair): SessionCookie[] {
+    return [
+        {name: ACCESS_COOKIE, value: tokens.accessToken},
+        {name: REFRESH_COOKIE, value: tokens.refreshToken},
+    ].map(({name, value}) => ({
+        name,
+        value,
+        options: {
             httpOnly: true,
             // secure: true,
-            expires: getTokenExpiryDate(JWT_REFRESH_TOKEN_EXPIRY_SECONDS),
             sameSite: "lax",
             path: "/",
-        });
+            expires: getTokenExpiryDate(value),
+        },
+    }));
+}
+
+/** For server actions and route handlers. The middleware sets cookies on its NextResponse instead. */
+export async function setSessionCookies(tokens: TokenPair) {
+    const cookieStore = await cookies();
+    for (const {name, value, options} of getSessionCookies(tokens)) {
+        cookieStore.set(name, value, options);
     }
 }
 
-function getTokenExpiryDate(expiration_seconds: number) {
-    return new Date(Date.now() + expiration_seconds * 1000);
-}
-
-export async function deleteJWTSession() {
+export async function clearSessionCookies() {
     const cookieStore = await cookies();
-    cookieStore.delete("access");
-    cookieStore.delete("refresh");
+    cookieStore.delete(ACCESS_COOKIE);
+    cookieStore.delete(REFRESH_COOKIE);
 }

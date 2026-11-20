@@ -1,12 +1,16 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from vce.auth import services
 from vce.auth.domain import RefreshToken
 from vce.auth.exceptions import InvalidToken, RefreshTokenReused
+from vce.auth.schemas import EmailLoginCredentials, EmailRegisterCredentials
 from vce.auth.security import (
     create_access_token,
     create_refresh_token,
@@ -14,8 +18,11 @@ from vce.auth.security import (
     hash_password,
     verify_password,
 )
-from vce.settings import JWT_ALGORITHM, JWT_AUDIENCE, JWT_SECRET_KEY
+from vce.settings import EMAIL_MAX_LENGTH, JWT_ALGORITHM, JWT_AUDIENCE, JWT_SECRET_KEY, PASSWORD_MAX_LENGTH
+from vce.user import services as user_services
 from vce.user.domain import User
+from vce.user.exceptions import UserAlreadyExists
+from vce.user.schemas import UserCreateByEmail
 
 # Generated with Node (same call as web/src/lib/auth/passwordHasher.ts):
 # crypto.scrypt("pässword 123".normalize(), "a1b2c3d4e5f60718293a4b5c6d7e8f90", 64)
@@ -207,3 +214,123 @@ def test_access_token_cannot_be_used_to_refresh(ctx):
     pair = _start(ctx)
     with pytest.raises(InvalidToken):
         _rotate(ctx, pair.access_token)
+
+
+# --- email availability ---
+
+
+class FakeEmailUsersRepo:
+    async def get_by_email(self, email: str) -> User | None:
+        if email == "taken@example.com":
+            return User(id=1, email=email, password="x", salt="y", github_id=None, github_name=None)
+        return None
+
+
+def test_email_available():
+    users: Any = FakeEmailUsersRepo()
+    assert asyncio.run(services.is_email_available("free@example.com", users))
+    assert not asyncio.run(services.is_email_available("taken@example.com", users))
+
+
+# --- registration races and input limits ---
+
+
+class FakeEmptyUsersRepo:
+    """No user exists yet, so the services' existence check passes."""
+
+    def __init__(self):
+        self.added: list[User] = []
+
+    async def get_by_email(self, email: str) -> User | None:
+        return None
+
+    async def get_by_github_id(self, github_id: int) -> User | None:
+        return None
+
+    async def add(self, user: User):
+        self.added.append(user)
+
+
+class UniqueViolationSession:
+    """Behaves like the database when a concurrent registration inserted the same user first."""
+
+    def __init__(self):
+        self.rolled_back = False
+
+    async def commit(self):
+        raise IntegrityError(
+            "INSERT INTO user ...", {}, Exception("duplicate key value violates unique constraint")
+        )
+
+    async def rollback(self):
+        self.rolled_back = True
+
+
+def test_concurrent_registration_raises_user_already_exists():
+    users: Any = FakeEmptyUsersRepo()
+    session: Any = UniqueViolationSession()
+    user_create = UserCreateByEmail(email="a@example.com", password="hash", salt="salt")
+    with pytest.raises(UserAlreadyExists):
+        asyncio.run(user_services.register_user_by_email(user_create, users, session))
+    assert session.rolled_back
+
+
+def test_credentials_length_limits():
+    with pytest.raises(ValidationError):
+        EmailRegisterCredentials(email="a@example.com", password="x" * (PASSWORD_MAX_LENGTH + 1))
+    with pytest.raises(ValidationError):
+        EmailLoginCredentials(email="a" * EMAIL_MAX_LENGTH + "@example.com", password="password")
+    EmailRegisterCredentials(email="a@example.com", password="x" * PASSWORD_MAX_LENGTH)
+
+
+# --- case-insensitive emails ---
+
+
+def test_emails_are_lowercased():
+    assert (
+        EmailRegisterCredentials(email="John.Doe@Gmail.COM", password="password").email
+        == "john.doe@gmail.com"
+    )
+    assert EmailLoginCredentials(email=" JOHN.DOE@gmail.com ", password="x").email == "john.doe@gmail.com"
+
+
+class InMemoryUsersRepo:
+    """Matches emails exactly, like the database does."""
+
+    def __init__(self):
+        self.users: list[User] = []
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self.users if u.email == email), None)
+
+    async def add(self, user: User):
+        user.id = len(self.users) + 1
+        self.users.append(user)
+
+
+class NoopSession:
+    async def commit(self):
+        pass
+
+    async def refresh(self, obj):
+        pass
+
+
+def test_register_and_login_with_different_case():
+    # Typed as Any: in-memory stand-ins for the repositories and the session
+    users: Any = InMemoryUsersRepo()
+    tokens: Any = FakeTokenRepo()
+    session: Any = NoopSession()
+    register = EmailRegisterCredentials(email="John.Doe@Gmail.COM", password="correct horse")
+    asyncio.run(services.register_with_password(register, users, tokens, session))
+    assert users.users[0].email == "john.doe@gmail.com"
+
+    for typed in ("john.doe@gmail.com", "JOHN.DOE@GMAIL.COM"):
+        login = EmailLoginCredentials(email=typed, password="correct horse")
+        assert asyncio.run(services.login_with_password(login, users, tokens, session)).access_token
+
+    assert not asyncio.run(
+        services.is_email_available(
+            EmailRegisterCredentials(email="JOHN.doe@gmail.com", password="password").email, users
+        )
+    )

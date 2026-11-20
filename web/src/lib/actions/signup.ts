@@ -1,8 +1,7 @@
 "use server";
 
-import {BACKEND_API_URL} from "@/config";
-import {createJWTSession, setJWTSessionHeader} from "@/lib/auth/jwtSession";
-import {registerUserOnSignUp} from "@/lib/auth/user";
+import {isEmailAvailable, registerWithPassword} from "@/lib/auth/backend";
+import {setSessionCookies} from "@/lib/auth/jwtSession";
 import {signUpSchema} from "@/lib/schemas/signup";
 import {getFieldsFromFormData} from "@/lib/utils";
 import {redirect} from "next/navigation";
@@ -16,26 +15,24 @@ type FormState = {
 export async function signUpAction(formState: FormState, formData: FormData): Promise<FormState> {
     const formDataAsObject = Object.fromEntries(formData);
     const parsed = await signUpSchema.safeParseAsync(formDataAsObject);
+    const fields = getFieldsFromFormData(formData);
 
     if (!parsed.success) {
         const errors = parsed.error.flatten().fieldErrors;
-        const fields = getFieldsFromFormData(formData);
         return {success: false, fields, errors};
     }
 
-    const user = await registerUserOnSignUp(parsed.data);
-    const {accessToken, refreshToken} = await createJWTSession(user.id);
-    await setJWTSessionHeader(accessToken, refreshToken)
-    console.log(`User with id=${user.id} logged in`);
+    // The backend creates the user and starts a session in one call
+    const result = await registerWithPassword(parsed.data.email, parsed.data.password);
+    if (!result.ok) {
+        const errors = result.reason === "email_taken" ? {email: ["Email is already in use"]} : result.errors;
+        return {success: false, fields, errors};
+    }
 
+    await setSessionCookies(result.tokens);
     redirect("/home");
 }
 
 export async function checkEmailAvailable(email: string) {
-    const res = await fetch(`${BACKEND_API_URL}/users/email/${email}`);
-    if (res.ok) {
-        console.log(`User with email ${email} already exists`);
-        return false;
-    }
-    return true;
+    return isEmailAvailable(email);
 }

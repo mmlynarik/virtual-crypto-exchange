@@ -21,8 +21,12 @@ export const signUpSchema = z
             .trim()
             .email("Invalid email format")
             .refine(checkEmailAvailableOnActive, "Email is already in use"),
-        password: z.string().trim().min(8, "Password must have at least 8 characters"),
-        confirmPassword: z.string().trim(),
+        // Same limits as the backend's EmailCredentials.
+        password: z
+            .string()
+            .min(8, "Password must have at least 8 characters")
+            .max(128, "Password must have at most 128 characters"),
+        confirmPassword: z.string(),
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: "Passwords must match",

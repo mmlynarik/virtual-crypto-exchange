@@ -20,3 +20,9 @@ class User:
             f"User(id={self.id!r}, email={self.email!r}, "
             f"github_id={self.github_id!r}, github_name={self.github_name!r})"
         )
+
+
+def normalize_email(email: str) -> str:
+    """Emails are case-insensitive here: stored lowercase, and every incoming address is lowercased before
+    it's compared or saved. The user table enforces it with a CHECK constraint (migration 0004)."""
+    return email.strip().lower()

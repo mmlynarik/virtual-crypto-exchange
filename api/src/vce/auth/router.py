@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from vce.auth import services
 from vce.auth.dependencies import CurrentUser
@@ -11,9 +13,11 @@ from vce.auth.exceptions import (
 )
 from vce.auth.repository import RefreshTokenRepository
 from vce.auth.schemas import (
-    EmailCredentials,
+    EmailAvailability,
+    EmailLoginCredentials,
+    EmailRegisterCredentials,
     GithubCode,
-    LoginCredentials,
+    NewEmail,
     RefreshRequest,
     RegisterResponse,
     TokenPair,
@@ -27,7 +31,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(creds: EmailCredentials, session: DBSession) -> RegisterResponse:
+async def register(creds: EmailRegisterCredentials, session: DBSession) -> RegisterResponse:
     try:
         return await services.register_with_password(
             creds, UsersRepository(session), RefreshTokenRepository(session), session
@@ -36,8 +40,14 @@ async def register(creds: EmailCredentials, session: DBSession) -> RegisterRespo
         raise HTTPException(status_code=409, detail=f"User with email {creds.email} already exists")
 
 
+@router.get("/email-available")
+async def email_available(email: Annotated[NewEmail, Query()], session: DBSession) -> EmailAvailability:
+    """For the sign-up form. Takes the email the same way /register does, so both see the same address."""
+    return EmailAvailability(available=await services.is_email_available(email, UsersRepository(session)))
+
+
 @router.post("/login")
-async def login(creds: LoginCredentials, session: DBSession) -> TokenPair:
+async def login(creds: EmailLoginCredentials, session: DBSession) -> TokenPair:
     try:
         return await services.login_with_password(
             creds, UsersRepository(session), RefreshTokenRepository(session), session

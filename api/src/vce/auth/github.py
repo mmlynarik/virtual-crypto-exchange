@@ -2,7 +2,13 @@ from httpx import AsyncClient, HTTPError
 from pydantic import BaseModel
 
 from vce.auth.exceptions import GithubAuthError
-from vce.settings import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_TOKEN_URL, GITHUB_USER_URL
+from vce.settings import (
+    GITHUB_CLIENT_ID,
+    GITHUB_CLIENT_SECRET,
+    GITHUB_NAME_MAX_LENGTH,
+    GITHUB_TOKEN_URL,
+    GITHUB_USER_URL,
+)
 
 
 class GithubUser(BaseModel):
@@ -42,5 +48,5 @@ async def get_github_user(client: AsyncClient, access_token: str) -> GithubUser:
         raise GithubAuthError(f"GitHub user request failed: {e}") from e
 
     data = res.json()
-    # user.github_name column is String(64)
-    return GithubUser(id=data["id"], name=(data.get("name") or data["login"])[:64])
+    # GitHub names can be longer than the user.github_name column
+    return GithubUser(id=data["id"], name=(data.get("name") or data["login"])[:GITHUB_NAME_MAX_LENGTH])

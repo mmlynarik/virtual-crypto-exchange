@@ -6,7 +6,8 @@ import {FaRegBell} from "react-icons/fa";
 import {RiQuestionMark} from "react-icons/ri";
 import {BsFillGrid3X3GapFill} from "react-icons/bs";
 
-export default function Header() {
+export default function Header({userName}: {userName: string}) {
+    const initial = userName.charAt(0).toUpperCase() || "?";
     return (
         <header className="flex h-[75px] flex-col border-b-1 px-8 pt-4">
             <div className="flex justify-between">
@@ -23,8 +24,11 @@ export default function Header() {
                     <Button className="size-[40px] cursor-pointer rounded-full bg-gray-200 hover:bg-gray-300">
                         <BsFillGrid3X3GapFill color="black" />
                     </Button>
-                    <Button className="size-[40px] cursor-pointer rounded-full bg-sky-500 hover:bg-sky-600">
-                        <span className="text-[16px] text-white"> M </span>
+                    <Button
+                        className="size-[40px] cursor-pointer rounded-full bg-sky-500 hover:bg-sky-600"
+                        title={userName}
+                    >
+                        <span className="text-[16px] text-white">{initial}</span>
                     </Button>
                 </div>
             </div>

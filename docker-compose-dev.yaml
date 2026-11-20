@@ -23,9 +23,9 @@ services:
       - BACKEND_DB_NAME=postgres
       - BACKEND_DB_PASSWORD=postgres
       - BACKEND_DB_HOST=db
-      - JWT_SECRET_KEY=G349D3/i12FVOZ2QyvQ8yZPTppgmw8XFBH6VTCkAofE=
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set it in .env.dev}
       - GITHUB_CLIENT_ID=Ov23li7Fta3hsirrob9c
-      - GITHUB_CLIENT_SECRET=1e1d22bf552e6980eba809e2a2a7eda12f548662
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:?set it in .env.dev}
     ports:
       - 8000:8000
     depends_on:
@@ -42,9 +42,7 @@ services:
     container_name: web
     environment:
       - BACKEND_API_URL=http://api:8000/api
-      - JWT_SECRET_KEY=G349D3/i12FVOZ2QyvQ8yZPTppgmw8XFBH6VTCkAofE=
       - GITHUB_CLIENT_ID=Ov23li7Fta3hsirrob9c
-      - GITHUB_CLIENT_SECRET=1e1d22bf552e6980eba809e2a2a7eda12f548662
       - GITHUB_REDIRECT_URL=http://localhost:3000/api/oauth/github
     ports:
       - 3000:3000
