@@ -24,5 +24,5 @@ rmc:
 rmi:
 	docker rmi -f $$(docker images -aq)
 
-makemigrations:
-	uv run --env-file ../.env alembic revision --autogenerate -m "add user created_at" --rev-id 0003
+migrate:
+	cd api && uv run --env-file ../.env alembic upgrade head
