@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +13,6 @@ from vce.auth.security import (
     decode_token,
     generate_salt,
     hash_password,
-    new_family_id,
     verify_password,
 )
 from vce.user.domain import User
@@ -24,23 +25,27 @@ from vce.utils import get_logger
 LOGGER = get_logger(__name__)
 
 
-async def _issue_token_pair(
-    user_id: int, family_id: str, token_repo: RefreshTokenRepository, session: AsyncSession
+async def issue_token_pair(
+    user_id: UUID, token_repo: RefreshTokenRepository, session: AsyncSession, family_id: UUID | None = None
 ) -> TokenPair:
-    refresh_token, record = create_refresh_token(user_id, family_id)
-    await token_repo.add(record)
+    """Issue a token pair; without family_id a new refresh token family (session) is started."""
+    access_token = create_access_token(user_id)
+    refresh_token = create_refresh_token(user_id, family_id)
+    await token_repo.add(refresh_token)
     await session.commit()
-    return TokenPair(access_token=create_access_token(user_id), refresh_token=refresh_token)
+    return TokenPair(access_token=access_token, refresh_token=refresh_token.token)
 
 
-async def start_session(user_id: int, token_repo: RefreshTokenRepository, session: AsyncSession) -> TokenPair:
+async def start_session(
+    user_id: UUID, token_repo: RefreshTokenRepository, session: AsyncSession
+) -> TokenPair:
     """Start a new refresh token family (one per login) and issue the first token pair."""
-    return await _issue_token_pair(user_id, new_family_id(), token_repo, session)
+    return await issue_token_pair(user_id, token_repo, session)
 
 
 async def register_with_password(
     creds: EmailRegisterCredentials,
-    repo: UsersRepository,
+    user_repo: UsersRepository,
     token_repo: RefreshTokenRepository,
     session: AsyncSession,
 ) -> RegisterResponse:
@@ -48,7 +53,7 @@ async def register_with_password(
     user_create = UserCreateByEmail(
         email=creds.email, password=hash_password(creds.password, salt), salt=salt
     )
-    created = await register_user_by_email(user_create=user_create, repo=repo, session=session)
+    created = await register_user_by_email(user_create=user_create, repo=user_repo, session=session)
     tokens = await start_session(created.id, token_repo, session)
     LOGGER.info("User with id=%s registered", created.id)
     return RegisterResponse(user_id=created.id, **tokens.model_dump())
@@ -70,7 +75,7 @@ async def login_with_password(
     if not verify_password(creds.password, user.password, user.salt):
         raise InvalidCredentials
     LOGGER.info("User with id=%s logged in with password", user.id)
-    return await start_session(user.id, token_repo, session)  # type: ignore[arg-type]
+    return await start_session(user.id, token_repo, session)
 
 
 async def login_with_github(
@@ -85,7 +90,7 @@ async def login_with_github(
 
     user = await get_user_by_github_id(github_user.id, repo=repo)
     if user:
-        user_id: int = user.id  # type: ignore[assignment]
+        user_id = user.id
     else:
         user_create = UserCreateByGithub(github_id=github_user.id, github_name=github_user.name)
         try:
@@ -96,7 +101,7 @@ async def login_with_github(
             existing = await get_user_by_github_id(github_user.id, repo=repo)
             if existing is None:
                 raise
-            user_id = existing.id  # type: ignore[assignment]
+            user_id = existing.id
 
     LOGGER.info("User with id=%s logged in with GitHub", user_id)
     return await start_session(user_id, token_repo, session)
@@ -126,7 +131,7 @@ async def rotate_refresh_token(
         raise InvalidToken("User in refresh token does not exist")
 
     await token_repo.delete_expired_for_user(record.user_id)
-    return await _issue_token_pair(record.user_id, record.family_id, token_repo, session)
+    return await issue_token_pair(record.user_id, token_repo, session, family_id=record.family_id)
 
 
 async def logout(refresh_token: str, token_repo: RefreshTokenRepository, session: AsyncSession) -> None:

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
@@ -13,4 +15,4 @@ class UserCreateByGithub(BaseModel):
 
 
 class UserCreated(BaseModel):
-    id: int
+    id: UUID

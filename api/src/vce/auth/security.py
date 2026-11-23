@@ -18,11 +18,10 @@ from vce.settings import (
     JWT_SECRET_KEY,
 )
 
-# Fail fast: the app imports this module at startup (via the auth router)
 if not JWT_SECRET_KEY:
     raise RuntimeError("Missing JWT_SECRET_KEY env variable")
 
-# Scrypt parameters match Node's crypto.scrypt defaults used by the web app, so existing hashes verify.
+
 SCRYPT_N = 16384
 SCRYPT_R = 8
 SCRYPT_P = 1
@@ -48,7 +47,7 @@ def verify_password(password: str, hashed_password: str, salt: str) -> bool:
     return hmac.compare_digest(hash_password(password, salt), hashed_password)
 
 
-def _encode(claims: dict[str, Any], expiry_seconds: int, now: datetime) -> str:
+def encode_jwt(claims: dict[str, Any], expiry_seconds: int, now: datetime) -> str:
     payload = {
         **claims,
         "aud": JWT_AUDIENCE,
@@ -58,31 +57,40 @@ def _encode(claims: dict[str, Any], expiry_seconds: int, now: datetime) -> str:
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def create_access_token(user_id: int) -> str:
-    now = datetime.now(UTC)
-    return _encode({"userId": user_id, "type": "access"}, JWT_ACCESS_TOKEN_EXPIRY_SECONDS, now)
-
-
-def create_refresh_token(user_id: int, family_id: str) -> tuple[str, RefreshToken]:
-    now = datetime.now(UTC)
-    jti = str(uuid.uuid7())
-    token = _encode(
-        {"userId": user_id, "type": "refresh", "jti": jti, "fam": family_id},
-        JWT_REFRESH_TOKEN_EXPIRY_SECONDS,
-        now,
+def decode_jwt(token: str, required: list[str]) -> dict[str, Any]:
+    return jwt.decode(
+        token,
+        JWT_SECRET_KEY,
+        algorithms=[JWT_ALGORITHM],
+        audience=JWT_AUDIENCE,
+        options={"require": required},
     )
-    record = RefreshToken(
+
+
+def create_access_token(user_id: uuid.UUID) -> str:
+    return encode_jwt(
+        {"userId": str(user_id), "type": "access"}, JWT_ACCESS_TOKEN_EXPIRY_SECONDS, datetime.now(UTC)
+    )
+
+
+def create_refresh_token(user_id: uuid.UUID, family_id: uuid.UUID | None = None) -> RefreshToken:
+    """
+    Without family_id a new family is started: each logged-in session has its own family_id
+    which carries over on rotation until revoked (e.g. on logout or detected reuse).
+    """
+    family_id = family_id or uuid.uuid7()
+    now = datetime.now(UTC)
+    jti = uuid.uuid7()
+    claims = {"userId": str(user_id), "type": "refresh", "jti": str(jti), "fam": str(family_id)}
+    token = encode_jwt(claims, JWT_REFRESH_TOKEN_EXPIRY_SECONDS, now)
+    return RefreshToken(
         jti=jti,
         user_id=user_id,
         family_id=family_id,
         created_at=now,
         expires_at=now + timedelta(seconds=JWT_REFRESH_TOKEN_EXPIRY_SECONDS),
+        token=token,
     )
-    return token, record
-
-
-def new_family_id() -> str:
-    return str(uuid.uuid7())
 
 
 def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
@@ -90,17 +98,16 @@ def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
     if expected_type == "refresh":
         required += ["jti", "fam"]
     try:
-        payload = jwt.decode(
-            token,
-            JWT_SECRET_KEY,
-            algorithms=[JWT_ALGORITHM],
-            audience=JWT_AUDIENCE,
-            options={"require": required},
-        )
+        payload = decode_jwt(token, required)
     except jwt.PyJWTError as e:
         raise InvalidToken(str(e)) from e
     if payload["type"] != expected_type:
         raise InvalidToken(f"Expected {expected_type} token, got {payload['type']}")
-    if not isinstance(payload["userId"], int):
-        raise InvalidToken("Invalid userId claim")
+
+    uuid_claims = ["userId", "jti", "fam"] if expected_type == "refresh" else ["userId"]
+    for claim in uuid_claims:
+        try:
+            payload[claim] = uuid.UUID(payload[claim])
+        except (TypeError, ValueError, AttributeError) as e:
+            raise InvalidToken(f"Invalid {claim} claim") from e
     return payload

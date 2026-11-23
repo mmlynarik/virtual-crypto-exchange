@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
 
@@ -34,7 +35,7 @@ class TokenPair(BaseModel):
 
 
 class RegisterResponse(TokenPair):
-    user_id: int
+    user_id: UUID
 
 
 class EmailAvailability(BaseModel):
@@ -44,7 +45,7 @@ class EmailAvailability(BaseModel):
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     email: str | None
     github_id: int | None
     github_name: str | None

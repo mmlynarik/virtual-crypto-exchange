@@ -1,12 +1,17 @@
+from datetime import datetime
+from uuid import UUID
+
+
 class User:
     def __init__(
         self,
-        id: int | None,
+        id: UUID,
         email: str | None,
         password: str | None,
         salt: str | None,
         github_id: int | None,
         github_name: str | None,
+        created_at: datetime | None = None,
     ):
         self.id = id
         self.email = email
@@ -14,6 +19,7 @@ class User:
         self.salt = salt
         self.github_id = github_id
         self.github_name = github_name
+        self.created_at = created_at
 
     def __repr__(self) -> str:
         return (

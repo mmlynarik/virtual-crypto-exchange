@@ -4,7 +4,7 @@ import {z} from "zod";
 
 // GET /auth/me (UserPublic on the backend)
 const currentUserSchema = z.object({
-    id: z.number(),
+    id: z.string().uuid(),
     email: z.string().nullable(),
     github_id: z.number().nullable(),
     github_name: z.string().nullable(),

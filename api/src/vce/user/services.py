@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +26,7 @@ async def _save_new_user(user: User, repo: UsersRepository, session: AsyncSessio
     except IntegrityError as e:
         await session.rollback()
         raise UserAlreadyExists from e
-    await session.refresh(user)
-    return UserCreated(id=user.id)  # type: ignore
+    return UserCreated(id=user.id)
 
 
 async def register_user_by_email(
@@ -35,7 +36,7 @@ async def register_user_by_email(
     if existing_user:
         raise UserAlreadyExists
     user = User(
-        id=None,
+        id=uuid.uuid7(),
         email=user_create.email,
         password=user_create.password,
         salt=user_create.salt,
@@ -52,7 +53,7 @@ async def register_user_by_github(
     if existing_user:
         raise UserAlreadyExists
     user = User(
-        id=None,
+        id=uuid.uuid7(),
         email=None,
         password=None,
         salt=None,

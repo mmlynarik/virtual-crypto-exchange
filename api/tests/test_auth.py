@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -47,33 +48,55 @@ def test_verify_password():
 
 # --- tokens ---
 
+USER_ID = uuid.UUID("019a0000-0000-7000-8000-0000000000aa")
+FAMILY_ID = uuid.UUID("019a0000-0000-7000-8000-000000000001")
+
 
 def test_access_token_roundtrip():
-    payload = decode_token(create_access_token(42), expected_type="access")
-    assert payload["userId"] == 42
+    payload = decode_token(create_access_token(USER_ID), expected_type="access")
+    assert payload["userId"] == USER_ID
     assert payload["aud"] == JWT_AUDIENCE
 
 
 def test_refresh_token_roundtrip():
-    token, record = create_refresh_token(42, "family-1")
-    payload = decode_token(token, expected_type="refresh")
+    record = create_refresh_token(USER_ID, FAMILY_ID)
+    assert record.token is not None
+    payload = decode_token(record.token, expected_type="refresh")
     assert payload["jti"] == record.jti
-    assert payload["fam"] == "family-1"
-    assert record.user_id == 42
+    assert payload["fam"] == FAMILY_ID
+    assert record.family_id == FAMILY_ID
+    assert record.user_id == USER_ID
+    assert payload["userId"] == USER_ID
+
+
+@pytest.mark.parametrize("claim", ["userId", "jti", "fam"])
+@pytest.mark.parametrize("value", ["not-a-uuid", 123])
+def test_malformed_refresh_uuid_claims_rejected(claim, value):
+    claims: dict[str, Any] = {"type": "refresh", "jti": str(uuid.uuid7()), "fam": str(FAMILY_ID)}
+    claims[claim] = value
+    with pytest.raises(InvalidToken):
+        decode_token(_encode(**claims), expected_type="refresh")
+
+
+def test_access_token_with_integer_user_id_rejected():
+    # Tokens issued before user ids became UUIDs
+    with pytest.raises(InvalidToken):
+        decode_token(_encode(userId=42), expected_type="access")
 
 
 def test_token_type_is_enforced():
-    refresh, _ = create_refresh_token(42, "family-1")
+    refresh = create_refresh_token(USER_ID, FAMILY_ID).token
+    assert refresh is not None
     with pytest.raises(InvalidToken):
         decode_token(refresh, expected_type="access")
     with pytest.raises(InvalidToken):
-        decode_token(create_access_token(42), expected_type="refresh")
+        decode_token(create_access_token(USER_ID), expected_type="refresh")
 
 
 def _encode(**overrides):
     now = datetime.now(UTC)
     claims = {
-        "userId": 42,
+        "userId": str(USER_ID),
         "type": "access",
         "aud": JWT_AUDIENCE,
         "iat": now,
@@ -95,7 +118,7 @@ def test_expired_token_rejected():
 
 def test_bad_signature_rejected():
     token = jwt.encode(
-        {"userId": 42, "type": "access", "aud": JWT_AUDIENCE}, "other-secret", algorithm="HS256"
+        {"userId": str(USER_ID), "type": "access", "aud": JWT_AUDIENCE}, "other-secret", algorithm="HS256"
     )
     with pytest.raises(InvalidToken):
         decode_token(token, expected_type="access")
@@ -106,27 +129,27 @@ def test_bad_signature_rejected():
 
 class FakeTokenRepo:
     def __init__(self):
-        self.rows: dict[str, RefreshToken] = {}
+        self.rows: dict[uuid.UUID, RefreshToken] = {}
 
     async def add(self, token: RefreshToken):
         self.rows[token.jti] = token
 
-    async def consume(self, jti: str) -> RefreshToken | None:
+    async def consume(self, jti: uuid.UUID) -> RefreshToken | None:
         return self.rows.pop(jti, None)
 
-    async def revoke_family(self, family_id: str):
+    async def revoke_family(self, family_id: uuid.UUID):
         self.rows = {k: v for k, v in self.rows.items() if v.family_id != family_id}
 
-    async def delete_expired_for_user(self, user_id: int):
+    async def delete_expired_for_user(self, user_id: uuid.UUID):
         now = datetime.now(UTC)
         self.rows = {k: v for k, v in self.rows.items() if not (v.user_id == user_id and v.expires_at < now)}
 
-    def families(self) -> set[str]:
+    def families(self) -> set[uuid.UUID]:
         return {r.family_id for r in self.rows.values()}
 
 
 class FakeUsersRepo:
-    async def get_by_id(self, id: int) -> User | None:
+    async def get_by_id(self, id: uuid.UUID) -> User | None:
         return User(id=id, email="a@b.c", password=None, salt=None, github_id=None, github_name=None)
 
 
@@ -140,7 +163,7 @@ def ctx():
     return FakeUsersRepo(), FakeTokenRepo(), FakeSession()
 
 
-def _start(ctx, user_id=1):
+def _start(ctx, user_id=USER_ID):
     _, token_repo, session = ctx
     return asyncio.run(services.start_session(user_id, token_repo, session))
 
@@ -161,7 +184,7 @@ def test_rotation_replaces_token_in_same_family(ctx):
     assert new["jti"] != old["jti"]
     assert new["fam"] == old["fam"]
     assert set(token_repo.rows) == {new["jti"]}
-    assert decode_token(second.access_token, "access")["userId"] == 1
+    assert decode_token(second.access_token, "access")["userId"] == USER_ID
 
 
 def test_reuse_revokes_whole_family(ctx):
@@ -222,7 +245,7 @@ def test_access_token_cannot_be_used_to_refresh(ctx):
 class FakeEmailUsersRepo:
     async def get_by_email(self, email: str) -> User | None:
         if email == "taken@example.com":
-            return User(id=1, email=email, password="x", salt="y", github_id=None, github_name=None)
+            return User(id=USER_ID, email=email, password="x", salt="y", github_id=None, github_name=None)
         return None
 
 
@@ -304,15 +327,11 @@ class InMemoryUsersRepo:
         return next((u for u in self.users if u.email == email), None)
 
     async def add(self, user: User):
-        user.id = len(self.users) + 1
         self.users.append(user)
 
 
 class NoopSession:
     async def commit(self):
-        pass
-
-    async def refresh(self, obj):
         pass
 
 
