@@ -48,4 +48,3 @@ class UserPublic(BaseModel):
     id: UUID
     email: str | None
     github_id: int | None
-    github_name: str | None

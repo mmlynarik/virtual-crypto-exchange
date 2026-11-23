@@ -26,6 +26,11 @@ export type RegisterResult =
     | {ok: false; reason: "email_taken"}
     | {ok: false; reason: "invalid"; errors: FieldErrors};
 
+export type GithubLoginResult =
+    | {ok: true; tokens: TokenPair}
+    | {ok: false; reason: "rejected"} // bad code, or the GitHub account has no verified primary email
+    | {ok: false; reason: "email_taken"}; // the GitHub email already belongs to another account
+
 export class BackendError extends Error {
     constructor(path: string, status: number) {
         super(`Backend request to ${path} failed with status ${status}`);
@@ -66,8 +71,19 @@ export async function loginWithPassword(email: string, password: string): Promis
     return postForTokenPair("/auth/login", {email, password});
 }
 
-export async function loginWithGithub(code: string): Promise<TokenPair | null> {
-    return postForTokenPair("/auth/github", {code});
+export async function loginWithGithub(code: string): Promise<GithubLoginResult> {
+    const path = "/auth/github";
+    const res = await post(path, {code});
+    if (res.status === 401) {
+        return {ok: false, reason: "rejected"};
+    }
+    if (res.status === 409) {
+        return {ok: false, reason: "email_taken"};
+    }
+    if (!res.ok) {
+        throw new BackendError(path, res.status);
+    }
+    return {ok: true, tokens: await parseTokenPair(res)};
 }
 
 /** Rotates the refresh token. The old one is single-use: sending it again revokes the whole session. */

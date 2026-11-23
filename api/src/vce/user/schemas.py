@@ -11,7 +11,7 @@ class UserCreateByEmail(BaseModel):
 
 class UserCreateByGithub(BaseModel):
     github_id: int
-    github_name: str
+    email: str
 
 
 class UserCreated(BaseModel):

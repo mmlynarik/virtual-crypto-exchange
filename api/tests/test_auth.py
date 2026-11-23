@@ -3,6 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import jwt
 import pytest
 from pydantic import ValidationError
@@ -10,7 +11,8 @@ from sqlalchemy.exc import IntegrityError
 
 from vce.auth import services
 from vce.auth.domain import RefreshToken
-from vce.auth.exceptions import InvalidToken, RefreshTokenReused
+from vce.auth.exceptions import GithubAuthError, InvalidToken, RefreshTokenReused
+from vce.auth.github import get_github_user
 from vce.auth.schemas import EmailLoginCredentials, EmailRegisterCredentials
 from vce.auth.security import (
     create_access_token,
@@ -19,7 +21,15 @@ from vce.auth.security import (
     hash_password,
     verify_password,
 )
-from vce.settings import EMAIL_MAX_LENGTH, JWT_ALGORITHM, JWT_AUDIENCE, JWT_SECRET_KEY, PASSWORD_MAX_LENGTH
+from vce.settings import (
+    EMAIL_MAX_LENGTH,
+    GITHUB_EMAILS_URL,
+    GITHUB_USER_URL,
+    JWT_ALGORITHM,
+    JWT_AUDIENCE,
+    JWT_SECRET_KEY,
+    PASSWORD_MAX_LENGTH,
+)
 from vce.user import services as user_services
 from vce.user.domain import User
 from vce.user.exceptions import UserAlreadyExists
@@ -150,7 +160,7 @@ class FakeTokenRepo:
 
 class FakeUsersRepo:
     async def get_by_id(self, id: uuid.UUID) -> User | None:
-        return User(id=id, email="a@b.c", password=None, salt=None, github_id=None, github_name=None)
+        return User(id=id, email="a@b.c", password=None, salt=None, github_id=None)
 
 
 class FakeSession:
@@ -245,7 +255,7 @@ def test_access_token_cannot_be_used_to_refresh(ctx):
 class FakeEmailUsersRepo:
     async def get_by_email(self, email: str) -> User | None:
         if email == "taken@example.com":
-            return User(id=USER_ID, email=email, password="x", salt="y", github_id=None, github_name=None)
+            return User(id=USER_ID, email=email, password="x", salt="y", github_id=None)
         return None
 
 
@@ -353,3 +363,99 @@ def test_register_and_login_with_different_case():
             EmailRegisterCredentials(email="JOHN.doe@gmail.com", password="password").email, users
         )
     )
+
+
+# --- GitHub login ---
+
+
+def _github_client(emails: list[dict[str, Any]], github_id: int = 7) -> httpx.AsyncClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == GITHUB_USER_URL:
+            return httpx.Response(
+                200, json={"id": github_id, "login": "octocat", "name": None, "email": None}
+            )
+        if url == GITHUB_EMAILS_URL:
+            return httpx.Response(200, json=emails)
+        return httpx.Response(404)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def test_github_user_uses_primary_verified_email():
+    client = _github_client(
+        [
+            {"email": "other@example.com", "primary": False, "verified": True},
+            {"email": "Octo.Cat@Example.com", "primary": True, "verified": True},
+        ]
+    )
+    user = asyncio.run(get_github_user(client, "gh-token"))
+    assert (user.id, user.email) == (7, "octo.cat@example.com")
+
+
+@pytest.mark.parametrize(
+    "emails",
+    [
+        [],
+        [{"email": "a@example.com", "primary": True, "verified": False}],
+        [{"email": "a@example.com", "primary": False, "verified": True}],
+    ],
+)
+def test_github_user_without_verified_primary_email_rejected(emails):
+    with pytest.raises(GithubAuthError):
+        asyncio.run(get_github_user(_github_client(emails), "gh-token"))
+
+
+class InMemoryGithubUsersRepo(InMemoryUsersRepo):
+    async def get_by_github_id(self, github_id: int) -> User | None:
+        return next((u for u in self.users if u.github_id == github_id), None)
+
+
+@pytest.fixture
+def login_github(monkeypatch):
+    async def exchange_code_for_token(client, code):
+        return "gh-token"
+
+    monkeypatch.setattr(services, "exchange_code_for_token", exchange_code_for_token)
+
+    def login(users, emails, github_id=7):
+        client = _github_client(emails, github_id)
+        tokens: Any = FakeTokenRepo()
+        session: Any = NoopSession()
+        return asyncio.run(services.login_with_github("code", users, tokens, session, client))
+
+    return login
+
+
+PRIMARY = [{"email": "Octo@Example.com", "primary": True, "verified": True}]
+
+
+def test_github_first_login_stores_email(login_github):
+    users: Any = InMemoryGithubUsersRepo()
+    login_github(users, PRIMARY)
+    assert [(u.github_id, u.email, u.password) for u in users.users] == [(7, "octo@example.com", None)]
+
+    login_github(users, PRIMARY)
+    assert len(users.users) == 1
+
+
+def test_github_login_fills_missing_email(login_github):
+    users: Any = InMemoryGithubUsersRepo()
+    users.users.append(User(id=USER_ID, email=None, password=None, salt=None, github_id=7))
+    login_github(users, PRIMARY)
+    assert users.users[0].email == "octo@example.com"
+
+
+def test_github_login_does_not_take_email_of_another_account(login_github):
+    users: Any = InMemoryGithubUsersRepo()
+    password_user = User(id=uuid.uuid7(), email="octo@example.com", password="x", salt="y", github_id=None)
+    users.users.append(password_user)
+
+    with pytest.raises(UserAlreadyExists):
+        login_github(users, PRIMARY)
+    assert users.users == [password_user]
+
+    # A GitHub user registered before emails were stored keeps logging in, without the taken email
+    users.users.append(User(id=USER_ID, email=None, password=None, salt=None, github_id=7))
+    login_github(users, PRIMARY)
+    assert users.users[1].email is None

@@ -7,7 +7,6 @@ const currentUserSchema = z.object({
     id: z.string().uuid(),
     email: z.string().nullable(),
     github_id: z.number().nullable(),
-    github_name: z.string().nullable(),
 });
 
 export type CurrentUser = z.infer<typeof currentUserSchema>;
@@ -22,5 +21,5 @@ export async function getCurrentUser(): Promise<CurrentUser> {
 }
 
 export function getDisplayName(user: CurrentUser): string {
-    return user.github_name ?? user.email ?? "";
+    return user.email ?? "";
 }

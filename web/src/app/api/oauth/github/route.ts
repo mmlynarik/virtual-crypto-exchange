@@ -12,12 +12,12 @@ export async function GET(request: NextRequest) {
         redirect("/login");
     }
 
-    const tokens = await loginWithGithub(code);
-    if (!tokens) {
-        console.log("GitHub login rejected by backend");
-        redirect("/login");
+    const result = await loginWithGithub(code);
+    if (!result.ok) {
+        console.log(`GitHub login rejected by backend: ${result.reason}`);
+        redirect(`/login?error=${result.reason === "email_taken" ? "github_email_taken" : "github_failed"}`);
     }
 
-    await setSessionCookies(tokens);
+    await setSessionCookies(result.tokens);
     redirect("/home");
 }

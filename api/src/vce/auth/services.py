@@ -19,7 +19,12 @@ from vce.user.domain import User
 from vce.user.exceptions import UserAlreadyExists
 from vce.user.repository import UsersRepository
 from vce.user.schemas import UserCreateByEmail, UserCreateByGithub
-from vce.user.services import get_user_by_github_id, register_user_by_email, register_user_by_github
+from vce.user.services import (
+    get_user_by_github_id,
+    register_user_by_email,
+    register_user_by_github,
+    set_missing_email,
+)
 from vce.utils import get_logger
 
 LOGGER = get_logger(__name__)
@@ -91,13 +96,16 @@ async def login_with_github(
     user = await get_user_by_github_id(github_user.id, repo=repo)
     if user:
         user_id = user.id
+        if await set_missing_email(user, github_user.email, repo=repo, session=session):
+            LOGGER.info("User with id=%s got its email from GitHub", user_id)
     else:
-        user_create = UserCreateByGithub(github_id=github_user.id, github_name=github_user.name)
+        user_create = UserCreateByGithub(github_id=github_user.id, email=github_user.email)
         try:
             user_id = (await register_user_by_github(user_create=user_create, repo=repo, session=session)).id
             LOGGER.info("User with id=%s registered via GitHub", user_id)
         except UserAlreadyExists:
-            # A concurrent first login with the same GitHub account registered it a moment earlier
+            # Either the GitHub email belongs to another account (re-raised for the router), or a concurrent
+            # first login with the same GitHub account registered it a moment earlier
             existing = await get_user_by_github_id(github_user.id, repo=repo)
             if existing is None:
                 raise

@@ -26,6 +26,9 @@ from vce.auth.schemas import (
 from vce.dependencies import DBSession, HTTPClient
 from vce.user.exceptions import UserAlreadyExists
 from vce.user.repository import UsersRepository
+from vce.utils import get_logger
+
+LOGGER = get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -62,8 +65,12 @@ async def login_github(body: GithubCode, session: DBSession, client: HTTPClient)
         return await services.login_with_github(
             body.code, UsersRepository(session), RefreshTokenRepository(session), session, client
         )
-    except GithubAuthError:
+    except GithubAuthError as e:
+        LOGGER.warning("GitHub login rejected: %s", e)
         raise UnauthorizedError("GitHub authentication failed")
+    except UserAlreadyExists:
+        LOGGER.info("GitHub login refused: the GitHub email already belongs to another account")
+        raise HTTPException(status_code=409, detail="An account with this GitHub email already exists")
 
 
 @router.post("/refresh")

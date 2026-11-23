@@ -37,10 +37,10 @@ The goal is to make FastAPI the auth authority:
 |---|---|---|---|---|
 | POST | `/auth/register` | `{email, password}` (`EmailCredentials`) | 201 `RegisterResponse` `{user_id, access_token, refresh_token, token_type}`. **Creates the `user` row** (salt + scrypt hash) and starts a session, so the new user is logged in straight away | 409 email exists, 422 invalid email or password shorter than 8 characters (rejected by Pydantic validation) |
 | POST | `/auth/login` | `{email, password}` (`LoginCredentials`) | 200 `TokenPair` | 401 "Incorrect email or password" (also returned for GitHub-only users with no password) |
-| POST | `/auth/github` | `{code}` | 200 `TokenPair`; creates the user on first login | 401 when the GitHub code exchange fails |
+| POST | `/auth/github` | `{code}` | 200 `TokenPair`; creates the user with the GitHub primary verified email on first login | 401 when the GitHub code exchange fails or the account has no verified primary email, 409 when that email belongs to another account |
 | POST | `/auth/refresh` | `{refresh_token}` | 200 `TokenPair` (both tokens new) | 401 when the token is invalid, expired, the wrong type, or reused (reuse also revokes the family) |
 | POST | `/auth/logout` | `{refresh_token}` | 204 | none (idempotent) |
-| GET | `/auth/me` | `Authorization: Bearer <access>` | 200 `UserPublic` (id, email, github_id, github_name) | 401 |
+| GET | `/auth/me` | `Authorization: Bearer <access>` | 200 `UserPublic` (id, email, github_id) | 401 |
 
 `TokenPair = {access_token, refresh_token, token_type: "bearer"}`.
 
@@ -50,7 +50,7 @@ The goal is to make FastAPI the auth authority:
 
 **`api/pyproject.toml`**: `uv add pyjwt`.
 
-**`api/src/vce/settings.py`**: add `JWT_SECRET_KEY` (from env; raise an error if it's missing), `JWT_ALGORITHM="HS256"`, `JWT_AUDIENCE="vce"`, `JWT_ACCESS_TOKEN_EXPIRY_SECONDS=300`, `JWT_REFRESH_TOKEN_EXPIRY_SECONDS=7*24*3600`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_TOKEN_URL`, `GITHUB_USER_URL`.
+**`api/src/vce/settings.py`**: add `JWT_SECRET_KEY` (from env; raise an error if it's missing), `JWT_ALGORITHM="HS256"`, `JWT_AUDIENCE="vce"`, `JWT_ACCESS_TOKEN_EXPIRY_SECONDS=300`, `JWT_REFRESH_TOKEN_EXPIRY_SECONDS=7*24*3600`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_TOKEN_URL`, `GITHUB_USER_URL`, `GITHUB_EMAILS_URL`.
 
 **`api/src/vce/auth.py`** (new domain module):
 - **Pydantic models** (`BaseModel`) for every request and response body:
@@ -60,8 +60,8 @@ The goal is to make FastAPI the auth authority:
   - `RefreshRequest`: `refresh_token: str`.
   - `TokenPair`: `access_token`, `refresh_token` and `token_type: Literal["bearer"] = "bearer"`.
   - `RegisterResponse(TokenPair)`: adds `user_id: int`.
-  - `UserPublic`: `id`, `email`, `github_id` and `github_name`, with `model_config = ConfigDict(from_attributes=True)` and built with `UserPublic.model_validate(user)`. It never includes `password` or `salt`.
-  - `GithubUser`: `id: int` and `name: str` (in `github.py`).
+  - `UserPublic`: `id`, `email` and `github_id`, with `model_config = ConfigDict(from_attributes=True)` and built with `UserPublic.model_validate(user)`. It never includes `password` or `salt`.
+  - `GithubUser`: `id: int` and `email: str` (in `github.py`; the primary verified email from `/user/emails`, which needs the `user:email` scope).
 - **A plain dataclass** for `RefreshToken(jti, user_id, family_id, created_at, expires_at)` only, because it's mapped imperatively in `orm.py` like `User` and `CGCoin`.
 - Exceptions: `InvalidCredentials`, `InvalidToken`, `RefreshTokenReused`, `GithubAuthError`. `PasswordTooShort` isn't needed, because the `Field` constraint covers it.
 - `generate_salt()` (`secrets.token_hex(16)`), `hash_password(pw, salt)` and `verify_password(pw, hashed, salt)`, all Node-compatible as described above.

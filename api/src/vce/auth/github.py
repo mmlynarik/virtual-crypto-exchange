@@ -3,17 +3,19 @@ from pydantic import BaseModel
 
 from vce.auth.exceptions import GithubAuthError
 from vce.settings import (
+    EMAIL_MAX_LENGTH,
     GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET,
-    GITHUB_NAME_MAX_LENGTH,
+    GITHUB_EMAILS_URL,
     GITHUB_TOKEN_URL,
     GITHUB_USER_URL,
 )
+from vce.user.domain import normalize_email
 
 
 class GithubUser(BaseModel):
     id: int
-    name: str
+    email: str
 
 
 async def exchange_code_for_token(client: AsyncClient, code: str) -> str:
@@ -37,16 +39,27 @@ async def exchange_code_for_token(client: AsyncClient, code: str) -> str:
     return access_token
 
 
-async def get_github_user(client: AsyncClient, access_token: str) -> GithubUser:
+async def get_from_github(client: AsyncClient, url: str, access_token: str):
     try:
         res = await client.get(
-            GITHUB_USER_URL,
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+            url, headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"}
         )
         res.raise_for_status()
     except HTTPError as e:
-        raise GithubAuthError(f"GitHub user request failed: {e}") from e
+        raise GithubAuthError(f"GitHub request to {url} failed: {e}") from e
+    return res.json()
 
-    data = res.json()
-    # GitHub names can be longer than the user.github_name column
-    return GithubUser(id=data["id"], name=(data.get("name") or data["login"])[:GITHUB_NAME_MAX_LENGTH])
+
+async def get_github_user(client: AsyncClient, access_token: str) -> GithubUser:
+    """The GitHub account id and its primary email. The email comes from /user/emails (needs the
+    user:email scope) rather than /user, which only shows an email the user chose to make public."""
+    data = await get_from_github(client, GITHUB_USER_URL, access_token)
+    emails = await get_from_github(client, GITHUB_EMAILS_URL, access_token)
+
+    primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
+    if primary is None:
+        raise GithubAuthError("GitHub account has no verified primary email")
+    email = normalize_email(primary["email"])
+    if len(email) > EMAIL_MAX_LENGTH:
+        raise GithubAuthError("GitHub primary email is too long")
+    return GithubUser(id=data["id"], email=email)
