@@ -33,26 +33,6 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  django:
-    image: docker.io/miromlynarik/pokedex-api:prod
-    container_name: django
-    environment:
-      - BACKEND_DB_USER=postgres
-      - BACKEND_DB_NAME=postgres
-      - BACKEND_DB_PASSWORD=${BACKEND_DB_PASSWORD:?set it in .env.prod}
-      - BACKEND_DB_HOST=db
-      - USEDB=postgres
-      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD:?set it in .env.prod}
-      - DJANGO_SUPERUSER_USER=admin
-      - DJANGO_SUPERUSER_EMAIL=
-    ports:
-      - 9000:8000
-    depends_on:
-      - db
-    restart: always
-    networks:
-      - caddy
-
   web:
     image: docker.io/miromlynarik/vce-web:prod
     container_name: web
