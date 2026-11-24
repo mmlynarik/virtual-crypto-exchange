@@ -20,3 +20,8 @@ runprod *args:
 migrate:
     @echo "Running migrations..."
     @cd api && uv run --env-file ../api/.env alembic upgrade head
+
+# Prune build cache
+prune:
+    @echo "Running docker cache prune..."
+    @docker builder prune -f
