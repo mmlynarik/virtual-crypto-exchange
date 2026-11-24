@@ -19,4 +19,4 @@ runprod *args:
 # Apply alembic migrations to the local db.
 migrate:
     @echo "Running migrations..."
-    @cd api && uv run --env-file ../.env.local alembic upgrade head
+    @cd api && uv run --env-file ../api/.env alembic upgrade head
