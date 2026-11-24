@@ -81,7 +81,7 @@ tests/
 # docker
 .dockerignore
 docker/
-Dockerfile
+Dockerfile*
 docker-compose*.*
 
 # k8s

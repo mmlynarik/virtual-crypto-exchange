@@ -19,7 +19,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ./api
-          target: prod
+          file: ./api/Dockerfile.prod
           push: true
           tags: miromlynarik/vce-api:prod
           cache-from: type=gha,scope=vce-api

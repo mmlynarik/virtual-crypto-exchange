@@ -16,7 +16,7 @@ services:
   api:
     build:
       context: ./api
-      target: dev
+      dockerfile: Dockerfile.dev
     container_name: api
     environment:
       - BACKEND_DB_USER=postgres

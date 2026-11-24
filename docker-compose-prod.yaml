@@ -24,7 +24,6 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set it in .env.prod}
       - GITHUB_CLIENT_ID=Ov23liNAnBUWffr5VN7O
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:?set it in .env.prod}
-    # No published port: only web calls the API, over the caddy network (http://api:8000)
     depends_on:
       - db
     restart: always
