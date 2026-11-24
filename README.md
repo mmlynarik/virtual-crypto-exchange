@@ -9,4 +9,4 @@ This project can be found at [mmlynarik.com](https://mmlynarik.com)
 ### Frontend
 - Client-side and server-side auth forms validation
 - Github social login
-- JWT token routes authentication 
+- JWT token routes authentication
