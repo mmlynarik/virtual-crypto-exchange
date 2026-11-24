@@ -12,9 +12,9 @@ uv sync
 ```
 
 ## 2. Run the FastAPI app in development mode using docker-compose
-The API application can be run using Makefile command which will spin up three docker containers - python app, postgres database and nextjs server
+The API application can be run using just command which will spin up three docker containers - python app, postgres database and nextjs server
 ```
-make rundev
+just rundev
 ```
 
 ## 3. API docs and usage:

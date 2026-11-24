@@ -97,6 +97,7 @@ k8s/
 docs/
 
 Makefile
+justfile
 data/
 
 # local config with passwords
