@@ -1,24 +1,27 @@
-# pre-commit runs hooks from the git root (the repo root), so paths here are relative to it.
-# Install with: pre-commit install --config api/.pre-commit-config.yaml
-files: ^api/
+# Install with: pre-commit install
+# Python hooks run only on api/ and read their settings from api/pyproject.toml;
+# the generic hooks at the bottom run on the whole repo.
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.6
     hooks:
       - id: ruff-check
+        files: ^api/
         args: [--fix, --config=api/pyproject.toml]
 
   - repo: https://github.com/psf/black
     rev: 26.10.1
     hooks:
       - id: black
+        files: ^api/
         args: [--config=api/pyproject.toml]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.1
     hooks:
       - id: mypy
+        files: ^api/
         args: [--config-file=api/pyproject.toml]
         # mypy runs in its own env, so it needs the project's typed dependencies to check against them
         additional_dependencies: [alembic, fastapi, httpx, pydantic, pyjwt, "sqlalchemy[asyncio]"]
@@ -28,6 +31,7 @@ repos:
     hooks:
       - id: isort
         name: isort (python)
+        files: ^api/
         args: [--settings-path=api/pyproject.toml]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
