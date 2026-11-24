@@ -18,10 +18,10 @@ export const SESSION_EXPIRED_PATH = "/api/auth/session-expired";
  * redirect() works by throwing, so don't call this inside a try/catch that swallows errors.
  */
 export async function backendFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const accessToken = (await cookies()).get(ACCESS_COOKIE)?.value;
     if (!BACKEND_API_URL) {
         throw new Error("Missing BACKEND_API_URL env variable");
     }
-    const accessToken = (await cookies()).get(ACCESS_COOKIE)?.value;
     if (!accessToken) {
         redirect(SESSION_EXPIRED_PATH);
     }
