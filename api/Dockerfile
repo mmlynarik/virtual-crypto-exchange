@@ -47,7 +47,7 @@ WORKDIR /app
 COPY --from=builder-dev /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 # Apply DB migrations, then start the app (exec: fastapi becomes PID 1 and receives signals)
-CMD ["sh", "-c", "vce-migrate && exec fastapi dev --host 0.0.0.0 --port 8000 --reload src/vce/app.py"]
+CMD ["sh", "-c", "vce-migrate && exec fastapi dev --host 0.0.0.0 --port 8000 --reload vce/app.py"]
 
 
 FROM python:3.14.7-slim AS prod

@@ -1,29 +1,27 @@
 [project]
-name = "VCE"
+name = "vce"
 version = "0.1.0"
-description = "Virtual Crypto Exchange project"
+description = "Virtual Crypto Exchange API"
 readme = "README.md"
-authors = [
-    { name = "Miroslav Mlynarik", email = "miroslav.mlynarik@gmail.com" }
-]
-requires-python = "==3.14.*"
+requires-python = ">=3.14.0"
+
 dependencies = [
-    "alembic>=1.20.1",
-    "asyncpg>=0.30.0",
-    "fastapi[standard]>=0.115.8",
-    "httpx>=0.28.1",
-    "pyjwt>=2.15.1",
-    "sqlalchemy[asyncio]>=2.0.38",
+    "alembic==1.20.1",
+    "asyncpg==0.32.0",
+    "fastapi[standard]==0.115.12",
+    "httpx==0.28.1",
+    "pyjwt==2.15.1",
+    "sqlalchemy[asyncio]==2.0.40",
 ]
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
-    "isort>=6.0.0",
-    "mypy>=1.15.0",
-    "pre-commit>=4.1.0",
-    "pytest>=8.3.4",
-    "ruff>=0.9.7",
+    "black==26.10.1",
+    "isort==9.0.2",
+    "mypy==2.4.1",
+    "pre-commit==4.2.0",
+    "pytest==8.3.5",
+    "ruff==0.17.6",
 ]
 
 [project.scripts]
@@ -33,9 +31,6 @@ vce-migrate = "vce.scripts.migrate:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/vce"]
 
 [tool.ruff]
 line-length = 110

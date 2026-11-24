@@ -32,7 +32,7 @@ services:
       - db
     restart: always
     volumes:
-      - ./api/src:/app/src
+      - ./api/vce:/app/vce
     networks:
       - caddy
 
