@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–1 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–2 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -106,10 +106,11 @@ File: [lib/auth/backend.ts](../src/lib/auth/backend.ts)
 
 File: [lib/auth/backend.ts](../src/lib/auth/backend.ts)
 
-- [ ] `linkGithubPending(pendingLinkToken, password)` returning
+- [x] `linkGithubPending(pendingLinkToken, password)` returning
       `{ok: true; tokens} | {ok: false; reason: "wrong_password" | "already_linked"}`.
-- [ ] 401 → `wrong_password`; 409 → `already_linked`; anything else not OK → `BackendError`.
-- [ ] Tests: each status.
+- [x] 401 → `wrong_password`; 422 → `wrong_password` too (only a password longer than the backend's maximum
+      gets 422, and no account can have one); 409 → `already_linked`; anything else not OK → `BackendError`.
+- [x] Tests: each status, and the request's path and body.
 
 ### 3. Pending link cookie
 

@@ -1,4 +1,4 @@
-import {BackendError, loginWithGithub} from "@/lib/auth/backend";
+import {BackendError, linkGithubPending, loginWithGithub} from "@/lib/auth/backend";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -74,5 +74,55 @@ describe("loginWithGithub", () => {
     it("throws on other failures", async () => {
         respond(500, {detail: "Internal Server Error"});
         await expect(loginWithGithub("gh-code")).rejects.toBeInstanceOf(BackendError);
+    });
+});
+
+describe("linkGithubPending", () => {
+    it("posts the token and password and returns the token pair", async () => {
+        respond(200, {access_token: "access", refresh_token: "refresh", token_type: "bearer"});
+
+        const result = await linkGithubPending("pending-token", "correct horse");
+
+        expect(result).toEqual({ok: true, tokens: {accessToken: "access", refreshToken: "refresh"}});
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe(`${process.env.BACKEND_API_URL}/auth/github/link-pending`);
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({
+            pending_link_token: "pending-token",
+            password: "correct horse",
+        });
+    });
+
+    it("reports a wrong password", async () => {
+        respond(401, {detail: "Incorrect email or password"});
+        expect(await linkGithubPending("pending-token", "wrong")).toEqual({
+            ok: false,
+            reason: "wrong_password",
+        });
+    });
+
+    it("reports a password longer than any account can have as wrong", async () => {
+        respond(422, {
+            detail: [{loc: ["body", "password"], msg: "String should have at most 128 characters"}],
+        });
+        expect(await linkGithubPending("pending-token", "x".repeat(200))).toEqual({
+            ok: false,
+            reason: "wrong_password",
+        });
+    });
+
+    it("reports an account or GitHub account linked in the meantime", async () => {
+        respond(409, {detail: "This account or this GitHub account is already linked"});
+        expect(await linkGithubPending("pending-token", "correct horse")).toEqual({
+            ok: false,
+            reason: "already_linked",
+        });
+    });
+
+    it("throws on other failures", async () => {
+        respond(500, {detail: "Internal Server Error"});
+        await expect(linkGithubPending("pending-token", "correct horse")).rejects.toBeInstanceOf(
+            BackendError
+        );
     });
 });

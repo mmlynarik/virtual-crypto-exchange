@@ -110,6 +110,35 @@ async function parseGithubConflict(res: Response): Promise<GithubLoginResult> {
     return {ok: false, reason: "email_taken"};
 }
 
+export type GithubLinkResult =
+    | {ok: true; tokens: TokenPair}
+    | {ok: false; reason: "wrong_password"}
+    | {ok: false; reason: "already_linked"}; // the account or the GitHub account got linked in the meantime
+
+/**
+ * Redeems the pending link token from loginWithGithub with the account's password: links GitHub to the
+ * account and logs in. The backend also answers 401 for an invalid or expired token; callers check the
+ * token's expiry first, so a 401 here means a wrong password.
+ */
+export async function linkGithubPending(
+    pendingLinkToken: string,
+    password: string
+): Promise<GithubLinkResult> {
+    const path = "/auth/github/link-pending";
+    const res = await post(path, {pending_link_token: pendingLinkToken, password});
+    // 422: a password longer than the backend allows, which no account can have
+    if (res.status === 401 || res.status === 422) {
+        return {ok: false, reason: "wrong_password"};
+    }
+    if (res.status === 409) {
+        return {ok: false, reason: "already_linked"};
+    }
+    if (!res.ok) {
+        throw new BackendError(path, res.status);
+    }
+    return {ok: true, tokens: await parseTokenPair(res)};
+}
+
 /** Rotates the refresh token. The old one is single-use: sending it again revokes the whole session. */
 export async function refreshTokens(refreshToken: string): Promise<TokenPair | null> {
     return postForTokenPair("/auth/refresh", {refresh_token: refreshToken});
