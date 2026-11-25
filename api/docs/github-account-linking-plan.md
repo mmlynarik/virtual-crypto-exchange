@@ -1,6 +1,7 @@
 # Plan: link GitHub to an existing email/password account
 
-Status: **backend done** (steps 1–6); frontend not started
+Status: **backend done** (steps 1–6); frontend planned in
+[web/docs/github-account-linking-plan.md](../../web/docs/github-account-linking-plan.md)
 Scope: backend (`api/`) only. Frontend changes are listed under [Out of scope](#out-of-scope).
 
 ## Problem
@@ -196,11 +197,8 @@ None. `user.github_id` and `uq_user_github_id` already exist.
 
 ## Out of scope
 
-- Frontend:
-  - [api/oauth/github/route.ts](../../web/src/app/api/oauth/github/route.ts) handles the
-    `ACCOUNT_EXISTS` 409: it keeps `pending_link_token` in a short-lived httpOnly cookie and redirects to
-    something like `/login?link=github`.
-  - That page shows the email (read-only) and a password field, and calls `link-pending`.
+- Frontend: planned separately in
+  [web/docs/github-account-linking-plan.md](../../web/docs/github-account-linking-plan.md).
 - Connecting GitHub from account settings (dropped). Consequence: a GitHub account whose primary email
   differs from the account email can't be linked. GitHub login with it creates a separate account, as today.
 - OAuth `state` checking. It lives in the frontend route, since the backend only receives `code`.
