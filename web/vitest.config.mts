@@ -11,6 +11,8 @@ export default defineConfig({
     },
     test: {
         environment: "node",
+        // Read by src/config.ts when it is first imported; tests mock fetch, so nothing is sent there
+        env: {BACKEND_API_URL: "http://backend.test"},
         include: ["src/**/*.test.ts"],
     },
 });

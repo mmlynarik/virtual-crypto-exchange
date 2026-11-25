@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (step 0 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–1 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -80,8 +80,9 @@ page and the server action read.
 The web app has no tests yet. Tests are written first for each step below, so this step comes first.
 
 - [x] Add `vitest` as a dev dependency and a `"test": "vitest run"` script.
-- [x] `vitest.config.ts`: the `@/` path alias, and an alias that maps `server-only` to an empty module (the
-      real package throws outside a Next.js server build).
+- [x] `vitest.config.mts` (`.mts` because the package isn't `"type": "module"`): the `@/` path alias, and
+      an alias that maps `server-only` to an empty module (the real package throws outside a Next.js
+      server build).
 - [x] Scope: unit tests for `lib/` modules (`backend.ts` with a mocked `fetch`, the cookie helpers with a
       mocked `next/headers`, the server actions with `redirect` mocked). Pages and components are checked
       by hand in step 8.
@@ -92,12 +93,14 @@ The web app has no tests yet. Tests are written first for each step below, so th
 
 File: [lib/auth/backend.ts](../src/lib/auth/backend.ts)
 
-- [ ] Zod schema for the 409 body (`detail.code`, `message`, optional `email` and `pending_link_token`).
-- [ ] New `GithubLoginResult` variant
+- [x] Zod schema for the 409 body (`detail.code`, `message`, optional `email` and `pending_link_token`).
+- [x] New `GithubLoginResult` variant
       `{ok: false; reason: "link_required"; email: string; pendingLinkToken: string}`.
-- [ ] `ACCOUNT_EXISTS` with an email and a token → `link_required`. `EMAIL_TAKEN`, or a 409 body that doesn't
+- [x] `ACCOUNT_EXISTS` with an email and a token → `link_required`. `EMAIL_TAKEN`, or a 409 body that doesn't
       parse → `email_taken`, as today.
-- [ ] Tests: each 409 shape; 401 → `rejected`; 200 → tokens; 500 → `BackendError`.
+- [x] Tests: each 409 shape (including the old plain-string body and a non-JSON body); 401 → `rejected`;
+      200 → tokens; 500 → `BackendError`. `BACKEND_API_URL` for tests is set in the Vitest config.
+- Until step 4, the callback route sends `link_required` to the generic "GitHub login failed" message.
 
 ### 2. Call `/auth/github/link-pending`
 

@@ -26,10 +26,22 @@ export type RegisterResult =
     | {ok: false; reason: "email_taken"}
     | {ok: false; reason: "invalid"; errors: FieldErrors};
 
+// 409 body of /auth/github. ACCOUNT_EXISTS: the GitHub email belongs to a password account, which the
+// pending link token plus that account's password can link (see linkGithubPending)
+const githubConflictSchema = z.object({
+    detail: z.object({
+        code: z.string(),
+        message: z.string(),
+        email: z.string().optional(),
+        pending_link_token: z.string().optional(),
+    }),
+});
+
 export type GithubLoginResult =
     | {ok: true; tokens: TokenPair}
     | {ok: false; reason: "rejected"} // bad code, or the GitHub account has no verified primary email
-    | {ok: false; reason: "email_taken"}; // the GitHub email already belongs to another account
+    | {ok: false; reason: "link_required"; email: string; pendingLinkToken: string}
+    | {ok: false; reason: "email_taken"}; // the GitHub email belongs to an account that can't be linked
 
 export class BackendError extends Error {
     constructor(path: string, status: number) {
@@ -78,12 +90,24 @@ export async function loginWithGithub(code: string): Promise<GithubLoginResult> 
         return {ok: false, reason: "rejected"};
     }
     if (res.status === 409) {
-        return {ok: false, reason: "email_taken"};
+        return parseGithubConflict(res);
     }
     if (!res.ok) {
         throw new BackendError(path, res.status);
     }
     return {ok: true, tokens: await parseTokenPair(res)};
+}
+
+/** Any 409 that isn't a complete ACCOUNT_EXISTS is reported as email taken, the safe fallback. */
+async function parseGithubConflict(res: Response): Promise<GithubLoginResult> {
+    const parsed = githubConflictSchema.safeParse(await res.json().catch(() => null));
+    if (parsed.success) {
+        const {code, email, pending_link_token} = parsed.data.detail;
+        if (code === "ACCOUNT_EXISTS" && email && pending_link_token) {
+            return {ok: false, reason: "link_required", email, pendingLinkToken: pending_link_token};
+        }
+    }
+    return {ok: false, reason: "email_taken"};
 }
 
 /** Rotates the refresh token. The old one is single-use: sending it again revokes the whole session. */
