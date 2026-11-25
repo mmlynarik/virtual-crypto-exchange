@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–3 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–4 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -100,7 +100,6 @@ File: [lib/auth/backend.ts](../src/lib/auth/backend.ts)
       parse → `email_taken`, as today.
 - [x] Tests: each 409 shape (including the old plain-string body and a non-JSON body); 401 → `rejected`;
       200 → tokens; 500 → `BackendError`. `BACKEND_API_URL` for tests is set in the Vitest config.
-- Until step 4, the callback route sends `link_required` to the generic "GitHub login failed" message.
 
 ### 2. Call `/auth/github/link-pending`
 
@@ -135,8 +134,14 @@ New file: [lib/auth/githubLink.ts](../src/lib/auth/githubLink.ts) (`server-only`
 
 File: [app/api/oauth/github/route.ts](../src/app/api/oauth/github/route.ts)
 
-- [ ] On `link_required`: `setPendingGithubLink(email, pendingLinkToken)`, then redirect to `/link-github`.
-- [ ] The other results are unchanged.
+- [x] On `link_required`: `setPendingGithubLink({email, token})`, then redirect to `/link-github`
+      (`PENDING_GITHUB_LINK_PATH`). No session cookies are set.
+- [x] The other results are unchanged.
+- [x] Tests (`route.test.ts`, with `redirect` and the auth modules mocked): no code → `/login`; success →
+      session cookies + `/home`; `link_required` → cookie + `/link-github`; `email_taken` and `rejected` →
+      `/login` with their error.
+- Until step 6, `/link-github` doesn't exist and isn't a public route, so the middleware sends the user to
+  `/login` without a message.
 
 ### 5. Server actions
 
