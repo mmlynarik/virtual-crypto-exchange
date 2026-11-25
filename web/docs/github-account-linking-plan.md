@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–5 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–6 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -140,8 +140,6 @@ File: [app/api/oauth/github/route.ts](../src/app/api/oauth/github/route.ts)
 - [x] Tests (`route.test.ts`, with `redirect` and the auth modules mocked): no code → `/login`; success →
       session cookies + `/home`; `link_required` → cookie + `/link-github`; `email_taken` and `rejected` →
       `/login` with their error.
-- Until step 6, `/link-github` doesn't exist and isn't a public route, so the middleware sends the user to
-  `/login` without a message.
 
 ### 5. Server actions
 
@@ -164,13 +162,14 @@ New file: [lib/actions/githubLink.ts](../src/lib/actions/githubLink.ts). Passwor
 
 ### 6. `/link-github` page
 
-New files: `app/(auth)/link-github/page.tsx`, `components/LinkGithubForm.tsx`.
+New files: [app/(auth)/link-github/page.tsx](../src/app/(auth)/link-github/page.tsx),
+[components/LinkGithubForm.tsx](../src/components/LinkGithubForm.tsx).
 Edit: [middleware.ts](../src/middleware.ts).
 
-- [ ] Add `/link-github` to `publicRoutes`. A logged-in user is still sent to `/home`, as on `/login`.
-- [ ] Server page: `getPendingGithubLink()`; `null` → redirect `/login?error=github_link_expired`.
+- [x] Add `/link-github` to `publicRoutes`. A logged-in user is still sent to `/home`, as on `/login`.
+- [x] Server page: `getPendingGithubLink()`; `null` → redirect `/login?error=github_link_expired`.
       Otherwise render `LinkGithubForm` with the email only (never the token).
-- [ ] `LinkGithubForm` (client), styled like `LoginForm` (`Card`, `Form`, `FormButton`, the same error box):
+- [x] `LinkGithubForm` (client), styled like `LoginForm` (`Card`, `Form`, `FormButton`, the same error box):
   - Title "Connect GitHub".
   - Text: "An account with **{email}** already exists. Enter its password to connect your GitHub account.
     You can then log in with either."
@@ -178,6 +177,11 @@ Edit: [middleware.ts](../src/middleware.ts).
     with `autoFocus`.
   - "Connect GitHub and log in" (pending: "Connecting"), and a "Cancel" button calling `cancelGithubLink`.
   - The action's error shown in the dismissible error box.
+- [x] `ErrorField` moved out of `LoginForm` into [components/ErrorField.tsx](../src/components/ErrorField.tsx)
+      and shared by both forms.
+- [x] Tests ([middleware.test.ts](../src/middleware.test.ts)): a logged-out user can open `/link-github`; a
+      logged-in one is sent to `/home`; the existing rules for `/login` and `/home` still hold. The page and
+      form are checked by hand in step 8; `npm run build` compiles them.
 
 ### 7. Login page messages
 

@@ -1,9 +1,11 @@
 import {TokenPair} from "@/lib/auth/backend";
+import {PENDING_GITHUB_LINK_PATH} from "@/lib/auth/githubLink";
 import {ACCESS_COOKIE, getSessionCookies, isAccessTokenUsable, REFRESH_COOKIE} from "@/lib/auth/jwtSession";
 import {refreshSessionOnce} from "@/lib/auth/refresh";
 import {NextRequest, NextResponse} from "next/server";
 
-const publicRoutes = ["/login", "/signup", "/"];
+// Pages for logged-out users. A logged-in user is sent home from them
+const publicRoutes = ["/login", "/signup", "/", PENDING_GITHUB_LINK_PATH];
 
 function redirectTo(path: string, req: NextRequest) {
     return NextResponse.redirect(new URL(path, req.nextUrl));
