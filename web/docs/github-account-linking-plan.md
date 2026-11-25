@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–4 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–5 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -145,9 +145,10 @@ File: [app/api/oauth/github/route.ts](../src/app/api/oauth/github/route.ts)
 
 ### 5. Server actions
 
-New file: `lib/actions/githubLink.ts`. Password schema in `lib/schemas/githubLink.ts`.
+New file: [lib/actions/githubLink.ts](../src/lib/actions/githubLink.ts). Password schema in
+[lib/schemas/githubLink.ts](../src/lib/schemas/githubLink.ts).
 
-- [ ] `linkGithubAction(prevState, formData)`:
+- [x] `linkGithubAction(prevState, formData)`:
   1. Validate the password with zod (required).
   2. `getPendingGithubLink()` returns `null` → redirect `/login?error=github_link_expired`.
   3. `linkGithubPending(...)`:
@@ -155,8 +156,11 @@ New file: `lib/actions/githubLink.ts`. Password schema in `lib/schemas/githubLin
      - `wrong_password` → return the form error "Incorrect password" (the cookie stays, so the user can
        retry).
      - `already_linked` → `clearPendingGithubLink()`, redirect `/login?error=github_link_conflict`.
-- [ ] `cancelGithubLink()`: `clearPendingGithubLink()`, redirect `/login`.
-- [ ] Tests: each branch, with the backend client, cookies and `redirect` mocked.
+- [x] `cancelGithubLink()`: `clearPendingGithubLink()`, redirect `/login`.
+- [x] Tests: each branch, with the backend client, cookies and `redirect` mocked.
+- [x] Shared test helper [test/nextNavigation.ts](../test/nextNavigation.ts) (a `redirect` that throws, plus
+      `redirectedTo`), imported as `@test/…` (alias in `vitest.config.mts` and `tsconfig.json`). The route
+      test from step 4 uses it too.
 
 ### 6. `/link-github` page
 

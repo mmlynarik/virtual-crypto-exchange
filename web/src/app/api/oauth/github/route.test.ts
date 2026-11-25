@@ -2,23 +2,11 @@ import {GET} from "@/app/api/oauth/github/route";
 import {loginWithGithub} from "@/lib/auth/backend";
 import {setPendingGithubLink} from "@/lib/auth/githubLink";
 import {setSessionCookies} from "@/lib/auth/jwtSession";
+import {redirectedTo} from "@test/nextNavigation";
 import {NextRequest} from "next/server";
 import {beforeEach, describe, expect, it, vi} from "vitest";
 
-// next/navigation's redirect() ends the request by throwing; this stand-in records where it was sent
-const {Redirect} = vi.hoisted(() => ({
-    Redirect: class Redirect extends Error {
-        constructor(public url: string) {
-            super(`redirect to ${url}`);
-        }
-    },
-}));
-
-vi.mock("next/navigation", () => ({
-    redirect: (url: string) => {
-        throw new Redirect(url);
-    },
-}));
+vi.mock("next/navigation", () => import("@test/nextNavigation"));
 vi.mock("@/lib/auth/backend", () => ({loginWithGithub: vi.fn()}));
 vi.mock("@/lib/auth/githubLink", () => ({
     PENDING_GITHUB_LINK_PATH: "/link-github",
@@ -31,16 +19,8 @@ beforeEach(() => {
 });
 
 /** Calls the route and returns where it redirected to. */
-async function callback(query: string): Promise<string> {
-    try {
-        await GET(new NextRequest(`http://localhost/api/oauth/github${query}`));
-    } catch (e) {
-        if (e instanceof Redirect) {
-            return e.url;
-        }
-        throw e;
-    }
-    throw new Error("The route didn't redirect");
+function callback(query: string): Promise<string> {
+    return redirectedTo(() => GET(new NextRequest(`http://localhost/api/oauth/github${query}`)));
 }
 
 const TOKENS = {accessToken: "access", refreshToken: "refresh"};
