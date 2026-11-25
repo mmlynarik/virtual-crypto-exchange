@@ -21,6 +21,11 @@ migrate:
     @echo "Running migrations..."
     @cd api && uv run --env-file ../api/.env alembic upgrade head
 
+# Check alembic migrations are needed.
+checkmig:
+    echo "Check migrations"
+    @cd api && uv run --env-file ../api/.env alembic check
+
 # Prune build cache
 prune:
     @echo "Running docker cache prune..."
