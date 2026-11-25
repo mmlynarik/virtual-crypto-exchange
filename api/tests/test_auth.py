@@ -6,16 +6,32 @@ from typing import Any
 import httpx
 import jwt
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from vce.auth import router as auth_router
 from vce.auth import services
 from vce.auth.domain import RefreshToken
-from vce.auth.exceptions import GithubAuthError, InvalidToken, RefreshTokenReused
+from vce.auth.exceptions import (
+    GithubAlreadyLinked,
+    GithubAuthError,
+    GithubEmailTaken,
+    GithubLinkRequired,
+    InvalidCredentials,
+    InvalidToken,
+    RefreshTokenReused,
+)
 from vce.auth.github import get_github_user
-from vce.auth.schemas import EmailLoginCredentials, EmailRegisterCredentials
+from vce.auth.schemas import (
+    EmailLoginCredentials,
+    EmailRegisterCredentials,
+    GithubCode,
+    GithubPendingLinkRequest,
+)
 from vce.auth.security import (
     create_access_token,
+    create_github_pending_link_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -101,6 +117,50 @@ def test_token_type_is_enforced():
         decode_token(refresh, expected_type="access")
     with pytest.raises(InvalidToken):
         decode_token(create_access_token(USER_ID), expected_type="refresh")
+
+
+GITHUB_ID = 12345678
+
+
+def test_github_pending_link_token_roundtrip():
+    payload = decode_token(
+        create_github_pending_link_token(USER_ID, GITHUB_ID), expected_type="github_pending_link"
+    )
+    assert payload["userId"] == USER_ID
+    assert payload["githubId"] == GITHUB_ID
+
+
+def test_github_pending_link_token_type_is_enforced():
+    pending = create_github_pending_link_token(USER_ID, GITHUB_ID)
+    with pytest.raises(InvalidToken):
+        decode_token(pending, expected_type="access")
+    with pytest.raises(InvalidToken):
+        decode_token(pending, expected_type="refresh")
+
+    refresh = create_refresh_token(USER_ID, FAMILY_ID).token
+    assert refresh is not None
+    for other in (create_access_token(USER_ID), refresh):
+        with pytest.raises(InvalidToken):
+            decode_token(other, expected_type="github_pending_link")
+
+
+def test_github_pending_link_token_without_github_id_rejected():
+    with pytest.raises(InvalidToken):
+        decode_token(_encode(type="github_pending_link"), expected_type="github_pending_link")
+
+
+@pytest.mark.parametrize("value", ["12345678", 1.5, True, None])
+def test_github_pending_link_token_non_int_github_id_rejected(value):
+    with pytest.raises(InvalidToken):
+        decode_token(_encode(type="github_pending_link", githubId=value), expected_type="github_pending_link")
+
+
+def test_github_pending_link_token_malformed_user_id_rejected():
+    with pytest.raises(InvalidToken):
+        decode_token(
+            _encode(type="github_pending_link", githubId=GITHUB_ID, userId="not-a-uuid"),
+            expected_type="github_pending_link",
+        )
 
 
 def _encode(**overrides):
@@ -336,6 +396,9 @@ class InMemoryUsersRepo:
     async def get_by_email(self, email: str) -> User | None:
         return next((u for u in self.users if u.email == email), None)
 
+    async def get_by_id(self, id: uuid.UUID) -> User | None:
+        return next((u for u in self.users if u.id == id), None)
+
     async def add(self, user: User):
         self.users.append(user)
 
@@ -446,16 +509,210 @@ def test_github_login_fills_missing_email(login_github):
     assert users.users[0].email == "octo@example.com"
 
 
-def test_github_login_does_not_take_email_of_another_account(login_github):
+def test_github_login_with_email_of_password_account_requires_link(login_github):
     users: Any = InMemoryGithubUsersRepo()
-    password_user = User(id=uuid.uuid7(), email="octo@example.com", password="x", salt="y", github_id=None)
+    password_user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
     users.users.append(password_user)
 
-    with pytest.raises(UserAlreadyExists):
+    with pytest.raises(GithubLinkRequired) as exc:
         login_github(users, PRIMARY)
     assert users.users == [password_user]
+    assert password_user.github_id is None
+    assert exc.value.email == "octo@example.com"
+    payload = decode_token(exc.value.pending_link_token, expected_type="github_pending_link")
+    assert (payload["userId"], payload["githubId"]) == (USER_ID, 7)
 
+
+def test_github_login_with_email_of_account_linked_to_other_github(login_github):
+    users: Any = InMemoryGithubUsersRepo()
+    other = User(id=USER_ID, email="octo@example.com", password=None, salt=None, github_id=99)
+    users.users.append(other)
+
+    with pytest.raises(GithubEmailTaken):
+        login_github(users, PRIMARY)
+    assert users.users == [other]
+    assert other.github_id == 99
+
+
+def test_github_user_without_email_does_not_take_email_of_another_account(login_github):
     # A GitHub user registered before emails were stored keeps logging in, without the taken email
+    users: Any = InMemoryGithubUsersRepo()
+    users.users.append(
+        User(id=uuid.uuid7(), email="octo@example.com", password="x", salt="y", github_id=None)
+    )
     users.users.append(User(id=USER_ID, email=None, password=None, salt=None, github_id=7))
     login_github(users, PRIMARY)
     assert users.users[1].email is None
+
+
+@pytest.mark.parametrize(
+    "password, github_id, expected",
+    [("x", None, True), ("x", 99, False), (None, None, False), (None, 99, False)],
+)
+def test_user_can_link_github(password, github_id, expected):
+    salt = "y" if password else None
+    user = User(id=USER_ID, email="a@b.c", password=password, salt=salt, github_id=github_id)
+    assert user.can_link_github is expected
+
+
+def _github_router_error(monkeypatch, error: Exception) -> HTTPException:
+    async def login_with_github(*args):
+        raise error
+
+    monkeypatch.setattr(auth_router.services, "login_with_github", login_with_github)
+    session: Any = NoopSession()
+    client: Any = None
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth_router.login_github(GithubCode(code="code"), session, client))
+    return exc.value
+
+
+def test_github_router_account_exists_response(monkeypatch):
+    error = _github_router_error(monkeypatch, GithubLinkRequired("octo@example.com", "pending-token"))
+    assert error.status_code == 409
+    assert isinstance(error.detail, dict)
+    assert error.detail["code"] == "ACCOUNT_EXISTS"
+    assert error.detail["email"] == "octo@example.com"
+    assert error.detail["pending_link_token"] == "pending-token"
+    assert error.detail["message"]
+
+
+@pytest.mark.parametrize("raised", [GithubEmailTaken(), UserAlreadyExists()])
+def test_github_router_email_taken_response(monkeypatch, raised):
+    # UserAlreadyExists: the email was taken by a concurrent registration after the service's checks
+    error = _github_router_error(monkeypatch, raised)
+    assert error.status_code == 409
+    assert isinstance(error.detail, dict)
+    assert error.detail["code"] == "EMAIL_TAKEN"
+    assert "pending_link_token" not in error.detail
+    assert error.detail["message"]
+
+
+# --- linking GitHub to an existing account ---
+
+
+def test_link_github_sets_github_id():
+    user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
+    session: Any = NoopSession()
+    asyncio.run(user_services.link_github(user, GITHUB_ID, session))
+    assert user.github_id == GITHUB_ID
+
+
+def test_concurrent_link_github_raises_user_already_exists():
+    # The same GitHub id was linked to or registered as another account between the caller's check and commit
+    user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
+    session: Any = UniqueViolationSession()
+    with pytest.raises(UserAlreadyExists):
+        asyncio.run(user_services.link_github(user, GITHUB_ID, session))
+    assert session.rolled_back
+
+
+# --- redeeming the pending link token with the account's password ---
+
+NODE_PASSWORD = "pässword 123"  # matches NODE_HASH with NODE_SALT
+
+
+def _password_user(github_id: int | None = None) -> User:
+    return User(id=USER_ID, email="octo@example.com", password=NODE_HASH, salt=NODE_SALT, github_id=github_id)
+
+
+def _link_pending(users, token: str, password: str = NODE_PASSWORD):
+    tokens: Any = FakeTokenRepo()
+    session: Any = NoopSession()
+    return asyncio.run(services.link_github_with_password(token, password, users, tokens, session))
+
+
+def test_link_pending_links_github_and_logs_in(login_github):
+    users: Any = InMemoryGithubUsersRepo()
+    user = _password_user()
+    users.users.append(user)
+
+    tokens = _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+    assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
+    assert user.github_id == 7
+
+    # The next GitHub login finds the account by its GitHub id, and password login still works
+    tokens = login_github(users, PRIMARY)
+    assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
+    assert users.users == [user]
+    login = EmailLoginCredentials(email="octo@example.com", password=NODE_PASSWORD)
+    tokens_repo: Any = FakeTokenRepo()
+    session: Any = NoopSession()
+    assert asyncio.run(services.login_with_password(login, users, tokens_repo, session)).access_token
+
+
+def test_link_pending_with_wrong_password_rejected():
+    users: Any = InMemoryGithubUsersRepo()
+    user = _password_user()
+    users.users.append(user)
+    with pytest.raises(InvalidCredentials):
+        _link_pending(users, create_github_pending_link_token(USER_ID, 7), password="wrong password")
+    assert user.github_id is None
+
+
+def test_link_pending_for_deleted_user_rejected():
+    users: Any = InMemoryGithubUsersRepo()
+    with pytest.raises(InvalidCredentials):
+        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        lambda: _encode(type="github_pending_link", githubId=7, exp=datetime.now(UTC) - timedelta(seconds=1)),
+        lambda: create_github_pending_link_token(USER_ID, 7)[:-2] + "xx",
+        lambda: create_access_token(USER_ID),
+    ],
+    ids=["expired", "tampered", "access-token"],
+)
+def test_link_pending_with_invalid_token_rejected(token):
+    users: Any = InMemoryGithubUsersRepo()
+    user = _password_user()
+    users.users.append(user)
+    with pytest.raises(InvalidToken):
+        _link_pending(users, token())
+    assert user.github_id is None
+
+
+def test_link_pending_when_account_got_github_meanwhile_rejected():
+    users: Any = InMemoryGithubUsersRepo()
+    users.users.append(_password_user(github_id=99))
+    with pytest.raises(GithubAlreadyLinked):
+        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+    assert users.users[0].github_id == 99
+
+
+def test_link_pending_when_github_id_now_on_another_account_rejected():
+    users: Any = InMemoryGithubUsersRepo()
+    user = _password_user()
+    users.users.append(user)
+    users.users.append(User(id=uuid.uuid7(), email=None, password=None, salt=None, github_id=7))
+    with pytest.raises(GithubAlreadyLinked):
+        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+    assert user.github_id is None
+
+
+@pytest.mark.parametrize(
+    "raised, status",
+    [
+        (InvalidToken("expired"), 401),
+        (InvalidCredentials(), 401),
+        (GithubAlreadyLinked(), 409),
+        (UserAlreadyExists(), 409),
+    ],
+)
+def test_link_pending_router_errors(monkeypatch, raised, status):
+    async def link_github_with_password(*args):
+        raise raised
+
+    monkeypatch.setattr(auth_router.services, "link_github_with_password", link_github_with_password)
+    session: Any = NoopSession()
+    body = GithubPendingLinkRequest(pending_link_token="token", password="password")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth_router.link_github_pending(body, session))
+    assert exc.value.status_code == status
+
+
+def test_link_pending_request_password_length_limit():
+    with pytest.raises(ValidationError):
+        GithubPendingLinkRequest(pending_link_token="token", password="x" * (PASSWORD_MAX_LENGTH + 1))

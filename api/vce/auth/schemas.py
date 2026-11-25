@@ -24,6 +24,27 @@ class GithubCode(BaseModel):
     code: str
 
 
+class GithubConflict(BaseModel):
+    """Why /auth/github refused with 409. ACCOUNT_EXISTS comes with a pending link token, redeemed with the
+    account's password; EMAIL_TAKEN can't be resolved by the user."""
+
+    code: Literal["ACCOUNT_EXISTS", "EMAIL_TAKEN"]
+    message: str
+    email: str | None = None
+    pending_link_token: str | None = None
+
+
+class GithubConflictResponse(BaseModel):
+    """The 409 body of /auth/github, for the OpenAPI docs."""
+
+    detail: GithubConflict
+
+
+class GithubPendingLinkRequest(BaseModel):
+    pending_link_token: str
+    password: str = Field(max_length=PASSWORD_MAX_LENGTH)
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 

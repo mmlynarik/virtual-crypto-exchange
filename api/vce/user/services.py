@@ -48,8 +48,11 @@ async def register_user_by_email(
 async def register_user_by_github(
     user_create: UserCreateByGithub, repo: UsersRepository, session: AsyncSession
 ) -> UserCreated:
-    """Raises UserAlreadyExists when the GitHub account is registered, or when its email already belongs
-    to another account (e.g. one registered with a password). Accounts are never merged by email."""
+    """
+    Raises UserAlreadyExists when the GitHub account is registered, or when its email already belongs
+    to another account (e.g. one registered with a password). Accounts are never merged by email: GitHub is
+    linked to an existing account only after its password is confirmed (see link_github).
+    """
     if await get_user_by_github_id(user_create.github_id, repo=repo):
         raise UserAlreadyExists
     if await get_user_by_email(user_create.email, repo=repo):
@@ -62,6 +65,18 @@ async def register_user_by_github(
         github_id=user_create.github_id,
     )
     return await _save_new_user(user, repo, session)
+
+
+async def link_github(user: User, github_id: int, session: AsyncSession) -> None:
+    """Link the GitHub account to the user. The caller has checked that the user has no GitHub account yet
+    and that no other account has this one; uq_user_github_id rejects a concurrent link or registration
+    of the same GitHub account, raised as UserAlreadyExists."""
+    user.github_id = github_id
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        raise UserAlreadyExists from e
 
 
 async def set_missing_email(user: User, email: str, repo: UsersRepository, session: AsyncSession) -> bool:

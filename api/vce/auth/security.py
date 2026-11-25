@@ -14,6 +14,7 @@ from vce.settings import (
     JWT_ACCESS_TOKEN_EXPIRY_SECONDS,
     JWT_ALGORITHM,
     JWT_AUDIENCE,
+    JWT_GITHUB_PENDING_LINK_TOKEN_EXPIRY_SECONDS,
     JWT_REFRESH_TOKEN_EXPIRY_SECONDS,
     JWT_SECRET_KEY,
 )
@@ -26,6 +27,18 @@ SCRYPT_N = 16384
 SCRYPT_R = 8
 SCRYPT_P = 1
 SCRYPT_KEY_LENGTH = 64
+
+# Claims each token type carries besides type/aud/iat/exp, by how they are validated
+UUID_CLAIMS: dict[TokenType, list[str]] = {
+    "access": ["userId"],
+    "refresh": ["userId", "jti", "fam"],
+    "github_pending_link": ["userId"],
+}
+INT_CLAIMS: dict[TokenType, list[str]] = {
+    "access": [],
+    "refresh": [],
+    "github_pending_link": ["githubId"],
+}
 
 
 def generate_salt() -> str:
@@ -93,10 +106,20 @@ def create_refresh_token(user_id: uuid.UUID, family_id: uuid.UUID | None = None)
     )
 
 
+def create_github_pending_link_token(user_id: uuid.UUID, github_id: int) -> str:
+    """
+    Issued when a GitHub login finds the GitHub email on an existing password account (user_id). It records
+    that the backend authenticated the GitHub account github_id, so the user only has to confirm the
+    account's password to link the two. Signed, so neither id can be swapped by the client.
+    """
+    claims = {"userId": str(user_id), "type": "github_pending_link", "githubId": github_id}
+    return encode_jwt(claims, JWT_GITHUB_PENDING_LINK_TOKEN_EXPIRY_SECONDS, datetime.now(UTC))
+
+
 def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
-    required = ["userId", "type", "aud", "iat", "exp"]
-    if expected_type == "refresh":
-        required += ["jti", "fam"]
+    uuid_claims = UUID_CLAIMS[expected_type]
+    int_claims = INT_CLAIMS[expected_type]
+    required = ["type", "aud", "iat", "exp", *uuid_claims, *int_claims]
     try:
         payload = decode_jwt(token, required)
     except jwt.PyJWTError as e:
@@ -104,10 +127,12 @@ def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:
     if payload["type"] != expected_type:
         raise InvalidToken(f"Expected {expected_type} token, got {payload['type']}")
 
-    uuid_claims = ["userId", "jti", "fam"] if expected_type == "refresh" else ["userId"]
     for claim in uuid_claims:
         try:
             payload[claim] = uuid.UUID(payload[claim])
         except (TypeError, ValueError, AttributeError) as e:
             raise InvalidToken(f"Invalid {claim} claim") from e
+    for claim in int_claims:
+        if type(payload[claim]) is not int:
+            raise InvalidToken(f"Invalid {claim} claim")
     return payload

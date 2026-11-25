@@ -5,7 +5,10 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from vce.auth import services
 from vce.auth.dependencies import CurrentUser
 from vce.auth.exceptions import (
+    GithubAlreadyLinked,
     GithubAuthError,
+    GithubEmailTaken,
+    GithubLinkRequired,
     InvalidCredentials,
     InvalidToken,
     RefreshTokenReused,
@@ -17,6 +20,9 @@ from vce.auth.schemas import (
     EmailLoginCredentials,
     EmailRegisterCredentials,
     GithubCode,
+    GithubConflict,
+    GithubConflictResponse,
+    GithubPendingLinkRequest,
     NewEmail,
     RefreshRequest,
     RegisterResponse,
@@ -59,7 +65,11 @@ async def login(creds: EmailLoginCredentials, session: DBSession) -> TokenPair:
         raise UnauthorizedError("Incorrect email or password")
 
 
-@router.post("/github")
+def github_conflict(conflict: GithubConflict) -> HTTPException:
+    return HTTPException(status_code=409, detail=conflict.model_dump(exclude_none=True))
+
+
+@router.post("/github", responses={409: {"model": GithubConflictResponse}})
 async def login_github(body: GithubCode, session: DBSession, client: HTTPClient) -> TokenPair:
     try:
         return await services.login_with_github(
@@ -68,9 +78,40 @@ async def login_github(body: GithubCode, session: DBSession, client: HTTPClient)
     except GithubAuthError as e:
         LOGGER.warning("GitHub login rejected: %s", e)
         raise UnauthorizedError("GitHub authentication failed")
-    except UserAlreadyExists:
-        LOGGER.info("GitHub login refused: the GitHub email already belongs to another account")
-        raise HTTPException(status_code=409, detail="An account with this GitHub email already exists")
+    except GithubLinkRequired as e:
+        raise github_conflict(
+            GithubConflict(
+                code="ACCOUNT_EXISTS",
+                message="An account with this email already exists. Enter its password to connect GitHub.",
+                email=e.email,
+                pending_link_token=e.pending_link_token,
+            )
+        )
+    except GithubEmailTaken, UserAlreadyExists:
+        LOGGER.info("GitHub login refused: the GitHub email belongs to an account that can't be linked")
+        raise github_conflict(
+            GithubConflict(code="EMAIL_TAKEN", message="An account with this GitHub email already exists.")
+        )
+
+
+@router.post("/github/link-pending")
+async def link_github_pending(body: GithubPendingLinkRequest, session: DBSession) -> TokenPair:
+    """Link GitHub to the account that /auth/github answered ACCOUNT_EXISTS for, once its password is
+    confirmed, and log in."""
+    try:
+        return await services.link_github_with_password(
+            body.pending_link_token,
+            body.password,
+            UsersRepository(session),
+            RefreshTokenRepository(session),
+            session,
+        )
+    except InvalidToken:
+        raise UnauthorizedError("Invalid or expired link token")
+    except InvalidCredentials:
+        raise UnauthorizedError("Incorrect email or password")
+    except GithubAlreadyLinked, UserAlreadyExists:
+        raise HTTPException(status_code=409, detail="This account or this GitHub account is already linked")
 
 
 @router.post("/refresh")

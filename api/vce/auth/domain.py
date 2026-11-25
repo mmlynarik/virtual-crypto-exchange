@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "github_pending_link"]
 
 
 class RefreshToken:

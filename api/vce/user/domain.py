@@ -19,6 +19,11 @@ class User:
         self.github_id = github_id
         self.created_at = created_at
 
+    @property
+    def can_link_github(self) -> bool:
+        """A password account without a GitHub account yet. Linking one needs the password confirmed."""
+        return self.github_id is None and self.password is not None
+
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r}, github_id={self.github_id!r})"
 
