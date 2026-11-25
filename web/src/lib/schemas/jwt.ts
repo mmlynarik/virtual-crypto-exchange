@@ -10,3 +10,13 @@ export const accessTokenSchema = z.object({
 });
 
 export type AccessTokenClaims = z.infer<typeof accessTokenSchema>;
+
+// Claims of the pending link token from a GitHub login whose email belongs to a password account
+export const githubPendingLinkTokenSchema = z.object({
+    userId: z.string().uuid(),
+    githubId: z.number().int(),
+    type: z.literal("github_pending_link"),
+    aud: z.literal("vce"),
+    iat: z.number(),
+    exp: z.number(),
+});

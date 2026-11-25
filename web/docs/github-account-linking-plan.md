@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–2 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–3 done), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -114,17 +114,22 @@ File: [lib/auth/backend.ts](../src/lib/auth/backend.ts)
 
 ### 3. Pending link cookie
 
-New file: `lib/auth/githubLink.ts` (`server-only`). Token claims schema in
+New file: [lib/auth/githubLink.ts](../src/lib/auth/githubLink.ts) (`server-only`). Token claims schema in
 [lib/schemas/jwt.ts](../src/lib/schemas/jwt.ts).
 
-- [ ] `githubPendingLinkTokenSchema`: `type: "github_pending_link"`, `userId`, `githubId`, `aud`, `exp`.
-- [ ] `setPendingGithubLink(email, token)`: one httpOnly, `sameSite: "lax"` cookie `github_pending_link`
-      holding `{email, token}` as JSON, `path: "/link-github"`, `expires` = the token's `exp`.
-- [ ] `getPendingGithubLink()`: `{email, token}`, or `null` when the cookie is missing, malformed, or holds
-      a token that is expired or about to expire (a short leeway, like `EXPIRY_LEEWAY_SECONDS`).
-- [ ] `clearPendingGithubLink()`.
-- [ ] Tests: round-trip; missing, malformed and expired cookies → `null`; the cookie options (httpOnly, path,
-      expires).
+- [x] `githubPendingLinkTokenSchema`: `type: "github_pending_link"`, `userId`, `githubId`, `aud`, `iat`,
+      `exp`.
+- [x] `setPendingGithubLink({email, token})`: one httpOnly, `sameSite: "lax"` cookie `github_pending_link`
+      holding `{email, token}` as JSON, `path: "/link-github"`, `expires` = the token's `exp`. Throws for a
+      token that isn't a pending link token.
+- [x] `getPendingGithubLink()`: `{email, token}`, or `null` when the cookie is missing, malformed, or holds
+      a token that is expired or about to expire. Reuses `EXPIRY_LEEWAY_SECONDS` (30 s), now exported from
+      [jwtSession.ts](../src/lib/auth/jwtSession.ts).
+- [x] `clearPendingGithubLink()`: deletes on `path: "/link-github"` (a cookie set on a path is only removed
+      on that path).
+- [x] Tests (`next/headers` mocked with an in-memory store): round-trip; the cookie options; a non-pending-link
+      token refused; missing, non-JSON, wrong-shape, non-JWT, access-token, expired and about-to-expire
+      cookies → `null`; clearing on the cookie's path.
 
 ### 4. GitHub callback route
 

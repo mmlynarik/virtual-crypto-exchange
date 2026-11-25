@@ -7,9 +7,9 @@ import "server-only";
 export const ACCESS_COOKIE = "access";
 export const REFRESH_COOKIE = "refresh";
 
-// Treat the access token as expired a little early, so one that passes here is still valid when the backend
+// Treat backend tokens as expired a little early, so one that passes here is still valid when the backend
 // checks it (request latency, clock skew between containers)
-const EXPIRY_LEEWAY_SECONDS = 30;
+export const EXPIRY_LEEWAY_SECONDS = 30;
 
 type SessionCookie = {
     name: string;
