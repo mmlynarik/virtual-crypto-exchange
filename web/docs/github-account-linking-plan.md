@@ -80,6 +80,8 @@ page and the server action read.
 The web app has no tests yet. Tests are written first for each step below, so this step comes first.
 
 - [x] Add `vitest` as a dev dependency and a `"test": "vitest run"` script.
+- [x] `@types/node` raised from `^20` to `^22`: Vitest 5 declares it as an optional peer (`^22 || >=24`), and
+      the Docker image's npm 10 `npm ci` refuses the conflict (npm 11 locally only accepted it).
 - [x] `vitest.config.mts` (`.mts` because the package isn't `"type": "module"`): the `@/` path alias, and
       an alias that maps `server-only` to an empty module (the real package throws outside a Next.js
       server build).
