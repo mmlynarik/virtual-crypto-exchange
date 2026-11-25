@@ -1,6 +1,6 @@
 # Plan: link GitHub to an existing account (frontend)
 
-Status: **in progress** (steps 0–6 done), branch `github-account-linking-web`
+Status: **in progress** (steps 0–7 done; step 8, the manual check, is left), branch `github-account-linking-web`
 Scope: web app (`web/`). The backend is done; see
 [api/docs/github-account-linking-plan.md](../../api/docs/github-account-linking-plan.md).
 
@@ -187,11 +187,17 @@ Edit: [middleware.ts](../src/middleware.ts).
 
 File: [app/(auth)/login/page.tsx](../src/app/(auth)/login/page.tsx)
 
-- [ ] `github_email_taken`: "An account with your GitHub email already exists and is connected to a
+- [x] `github_email_taken`: "An account with your GitHub email already exists and is connected to a
       different GitHub account." (The settings advice goes.)
-- [ ] New `github_link_expired`: "Connecting GitHub took too long. Log in with GitHub again to retry."
-- [ ] New `github_link_conflict`: "This account or this GitHub account is already connected. Try logging in
+- [x] New `github_link_expired`: "Connecting GitHub took too long. Log in with GitHub again to retry."
+- [x] New `github_link_conflict`: "This account or this GitHub account is already connected. Try logging in
       with GitHub or your password."
+- [x] The messages moved from the page into
+      [lib/githubLoginErrors.ts](../src/lib/githubLoginErrors.ts) (`githubLoginErrorMessage`), since a
+      Next.js page file can't export them for tests. A `Map` instead of an object literal, so
+      `?error=toString` no longer returns an inherited function.
+- [x] Tests: every `?error=` the app redirects with has a message; `github_email_taken` no longer mentions
+      settings; no error or an unknown one shows nothing.
 
 ### 8. Manual check (dev stack, `just rundev`)
 

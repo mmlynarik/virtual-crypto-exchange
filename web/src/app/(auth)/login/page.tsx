@@ -1,11 +1,6 @@
 import LoginForm from "@/components/LoginForm";
 import NextImageLink from "@/components/NextImageLink";
-
-const GITHUB_ERRORS: Record<string, string> = {
-    github_email_taken:
-        "An account with your GitHub email already exists. Log in with your password and connect your GitHub account from account settings.",
-    github_failed: "GitHub login failed. Please try again.",
-};
+import {githubLoginErrorMessage} from "@/lib/githubLoginErrors";
 
 export default async function Login({searchParams}: {searchParams: Promise<{error?: string}>}) {
     const {error} = await searchParams;
@@ -16,7 +11,7 @@ export default async function Login({searchParams}: {searchParams: Promise<{erro
                 <h2 className="text-3xl">Your safe place to trade crypto</h2>
             </div>
             <div className="absolute inset-y-1/5 start-3/5">
-                <LoginForm githubError={error ? GITHUB_ERRORS[error] : undefined} />
+                <LoginForm githubError={githubLoginErrorMessage(error)} />
             </div>
             <footer className="absolute bottom-1/10">
                 <NextImageLink />
