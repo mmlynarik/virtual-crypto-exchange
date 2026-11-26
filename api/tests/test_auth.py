@@ -254,7 +254,7 @@ def ctx():
 
 
 def _start(ctx, user_id=USER_ID):
-    return asyncio.run(services.start_session(user_id, ctx))
+    return asyncio.run(services._start_session(user_id, ctx))
 
 
 def _rotate(ctx, refresh_token):

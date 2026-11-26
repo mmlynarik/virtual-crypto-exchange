@@ -58,12 +58,11 @@ def create_access_token(user_id: uuid.UUID) -> str:
     )
 
 
-def create_refresh_token(user_id: uuid.UUID, family_id: uuid.UUID | None = None) -> RefreshToken:
+def create_refresh_token(user_id: uuid.UUID, family_id: uuid.UUID) -> RefreshToken:
     """
-    Without family_id a new family is started: each logged-in session has its own family_id
-    which carries over on rotation until revoked (e.g. on logout or detected reuse).
+    Each logged-in session has its own family_id, which carries over on rotation until revoked (e.g. on
+    logout or detected reuse).
     """
-    family_id = family_id or uuid.uuid7()
     now = datetime.now(UTC)
     jti = uuid.uuid7()
     claims = {"userId": str(user_id), "type": "refresh", "jti": str(jti), "fam": str(family_id)}
