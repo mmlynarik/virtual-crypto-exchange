@@ -2,9 +2,8 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from vce.db import SessionMaker, get_db_session
+from vce.db import SessionMaker
 from vce.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
 
 
@@ -17,5 +16,4 @@ def get_unit_of_work(sessionmaker: SessionMaker) -> AbstractUnitOfWork:
 
 
 HTTPClient = Annotated[AsyncClient, Depends(get_http_client)]
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
 UnitOfWork = Annotated[AbstractUnitOfWork, Depends(get_unit_of_work)]

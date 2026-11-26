@@ -46,7 +46,7 @@ def test_sqlalchemy_uow_opens_a_session_per_block_and_closes_it():
 
     async def use():
         async with uow:
-            assert uow.users.session is uow.refresh_tokens.session is sessions[-1]
+            assert uow.users.session is uow.refresh_tokens.session is uow.coins.session is sessions[-1]
             await uow.commit()
         with pytest.raises(RuntimeError):
             async with uow:

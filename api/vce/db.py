@@ -1,4 +1,3 @@
-from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -15,8 +14,3 @@ def get_sessionmaker(request: Request) -> async_sessionmaker[AsyncSession]:
 
 
 SessionMaker = Annotated[async_sessionmaker[AsyncSession], Depends(get_sessionmaker)]
-
-
-async def get_db_session(sessionmaker: SessionMaker) -> AsyncIterator[AsyncSession]:
-    async with sessionmaker() as session:
-        yield session

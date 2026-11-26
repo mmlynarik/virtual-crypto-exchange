@@ -1,6 +1,7 @@
 """Fakes, constants and helpers shared by the test modules."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -8,6 +9,7 @@ import httpx
 import jwt
 
 from vce.auth.domain import RefreshToken
+from vce.coin.domain import CGCoin
 from vce.settings import (
     GITHUB_EMAILS_URL,
     GITHUB_USER_URL,
@@ -107,6 +109,46 @@ class InMemoryGithubUsersRepo(InMemoryUsersRepo):
         return next((u for u in self.users if u.github_id == github_id), None)
 
 
+class InMemoryCoinRepo:
+    def __init__(self):
+        self.coins: dict[str, CGCoin] = {}
+
+    async def add(self, coin: CGCoin):
+        self.coins[coin.id] = coin
+
+    async def exists(self, symbol: str) -> bool:
+        return any(c.symbol == symbol for c in self.coins.values())
+
+    async def get_by_symbol(self, symbol: str) -> list[CGCoin]:
+        return [c for c in self.coins.values() if c.symbol == symbol]
+
+    async def get_by_id(self, id: str) -> CGCoin | None:
+        return self.coins.get(id)
+
+    async def list(self) -> list[CGCoin]:
+        return list(self.coins.values())
+
+    async def delete(self, id: str):
+        del self.coins[id]
+
+    async def update_market_data(self, coins: Sequence[CGCoin]):
+        for coin in coins:
+            stored = self.coins[coin.id]
+            for field in MARKET_FIELDS:
+                setattr(stored, field, getattr(coin, field))
+
+
+# What CGCoinRepository.update_market_data updates: name and symbol stay
+MARKET_FIELDS = [
+    "current_price",
+    "market_cap",
+    "circulating_supply",
+    "total_supply",
+    "max_supply",
+    "last_updated",
+]
+
+
 class FakeUnitOfWork(AbstractUnitOfWork):
     """In-memory stand-in. Counts commits; the first failing_commits of them fail like a unique constraint
     that a concurrent request got to first."""
@@ -114,10 +156,14 @@ class FakeUnitOfWork(AbstractUnitOfWork):
     # The in-memory fakes, not the SQLAlchemy repositories
     users: Any
     refresh_tokens: Any
+    coins: Any
 
-    def __init__(self, users: Any = None, refresh_tokens: Any = None, failing_commits: int = 0):
+    def __init__(
+        self, users: Any = None, refresh_tokens: Any = None, coins: Any = None, failing_commits: int = 0
+    ):
         self.users = users if users is not None else InMemoryGithubUsersRepo()
         self.refresh_tokens = refresh_tokens if refresh_tokens is not None else FakeTokenRepo()
+        self.coins = coins if coins is not None else InMemoryCoinRepo()
         self.failing_commits = failing_commits
         self.commits = 0
 
