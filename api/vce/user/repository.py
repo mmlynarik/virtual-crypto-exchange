@@ -29,3 +29,6 @@ class UsersRepository:
 
     async def get_by_id(self, id: UUID) -> User | None:
         return await self.session.get(User, id)
+
+    async def lock(self, user: User) -> None:
+        await self.session.refresh(user, with_for_update=True)

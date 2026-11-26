@@ -1,4 +1,6 @@
+import ast
 import asyncio
+import inspect
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -34,8 +36,6 @@ from vce.auth.security import (
     create_github_pending_link_token,
     create_refresh_token,
     decode_token,
-    hash_password,
-    verify_password,
 )
 from vce.settings import (
     EMAIL_MAX_LENGTH,
@@ -46,10 +46,11 @@ from vce.settings import (
     JWT_SECRET_KEY,
     PASSWORD_MAX_LENGTH,
 )
-from vce.user import services as user_services
+from vce.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork, UniqueViolation
+from vce.user import domain as user_domain
 from vce.user.domain import User
-from vce.user.exceptions import UserAlreadyExists
-from vce.user.schemas import UserCreateByEmail
+from vce.user.exceptions import CannotLinkGithub, UserAlreadyExists, WrongPassword
+from vce.utils import hash_password, verify_password
 
 # Generated with Node (same call as web/src/lib/auth/passwordHasher.ts):
 # crypto.scrypt("pässword 123".normalize(), "a1b2c3d4e5f60718293a4b5c6d7e8f90", 64)
@@ -223,28 +224,45 @@ class FakeUsersRepo:
         return User(id=id, email="a@b.c", password=None, salt=None, github_id=None)
 
 
-class FakeSession:
+class FakeUnitOfWork(AbstractUnitOfWork):
+    """In-memory stand-in. Counts commits; the first failing_commits of them fail like a unique constraint
+    that a concurrent request got to first."""
+
+    # The in-memory fakes, not the SQLAlchemy repositories
+    users: Any
+    refresh_tokens: Any
+
+    def __init__(self, users: Any = None, refresh_tokens: Any = None, failing_commits: int = 0):
+        self.users = users if users is not None else InMemoryGithubUsersRepo()
+        self.refresh_tokens = refresh_tokens if refresh_tokens is not None else FakeTokenRepo()
+        self.failing_commits = failing_commits
+        self.commits = 0
+
     async def commit(self):
+        if self.failing_commits:
+            self.failing_commits -= 1
+            raise UniqueViolation
+        self.commits += 1
+
+    async def rollback(self):
         pass
 
 
 @pytest.fixture
 def ctx():
-    return FakeUsersRepo(), FakeTokenRepo(), FakeSession()
+    return FakeUnitOfWork(users=FakeUsersRepo())
 
 
 def _start(ctx, user_id=USER_ID):
-    _, token_repo, session = ctx
-    return asyncio.run(services.start_session(user_id, token_repo, session))
+    return asyncio.run(services.start_session(user_id, ctx))
 
 
 def _rotate(ctx, refresh_token):
-    users, token_repo, session = ctx
-    return asyncio.run(services.rotate_refresh_token(refresh_token, users, token_repo, session))
+    return asyncio.run(services.rotate_refresh_token(refresh_token, ctx))
 
 
 def test_rotation_replaces_token_in_same_family(ctx):
-    _, token_repo, _ = ctx
+    token_repo = ctx.refresh_tokens
     first = _start(ctx)
     old = decode_token(first.refresh_token, "refresh")
 
@@ -255,10 +273,12 @@ def test_rotation_replaces_token_in_same_family(ctx):
     assert new["fam"] == old["fam"]
     assert set(token_repo.rows) == {new["jti"]}
     assert decode_token(second.access_token, "access")["userId"] == USER_ID
+    # Consuming the old token and storing the new one is one transaction
+    assert ctx.commits == 1
 
 
 def test_reuse_revokes_whole_family(ctx):
-    _, token_repo, _ = ctx
+    token_repo = ctx.refresh_tokens
     first = _start(ctx)
     second = _rotate(ctx, first.refresh_token)
 
@@ -266,13 +286,15 @@ def test_reuse_revokes_whole_family(ctx):
         _rotate(ctx, first.refresh_token)
 
     assert token_repo.rows == {}
+    # The revocation is committed although the request fails
+    assert ctx.commits == 2
     # The legitimately rotated token is dead too
     with pytest.raises(RefreshTokenReused):
         _rotate(ctx, second.refresh_token)
 
 
 def test_reuse_does_not_affect_other_sessions(ctx):
-    _, token_repo, _ = ctx
+    token_repo = ctx.refresh_tokens
     session_a = _start(ctx)
     session_b = _start(ctx)
     _rotate(ctx, session_a.refresh_token)
@@ -285,11 +307,11 @@ def test_reuse_does_not_affect_other_sessions(ctx):
 
 
 def test_logout_revokes_family_only(ctx):
-    _, token_repo, session = ctx
     session_a = _start(ctx)
     session_b = _start(ctx)
 
-    asyncio.run(services.logout(session_a.refresh_token, token_repo, session))
+    asyncio.run(services.logout(session_a.refresh_token, ctx))
+    assert ctx.commits == 1
 
     with pytest.raises(RefreshTokenReused):
         _rotate(ctx, session_a.refresh_token)
@@ -297,9 +319,9 @@ def test_logout_revokes_family_only(ctx):
 
 
 def test_logout_with_invalid_token_is_noop(ctx):
-    _, token_repo, session = ctx
+    token_repo = ctx.refresh_tokens
     _start(ctx)
-    asyncio.run(services.logout("garbage", token_repo, session))
+    asyncio.run(services.logout("garbage", ctx))
     assert len(token_repo.rows) == 1
 
 
@@ -320,52 +342,31 @@ class FakeEmailUsersRepo:
 
 
 def test_email_available():
-    users: Any = FakeEmailUsersRepo()
-    assert asyncio.run(services.is_email_available("free@example.com", users))
-    assert not asyncio.run(services.is_email_available("taken@example.com", users))
+    uow = FakeUnitOfWork(users=FakeEmailUsersRepo())
+    assert asyncio.run(services.is_email_available("free@example.com", uow))
+    assert not asyncio.run(services.is_email_available("taken@example.com", uow))
+    assert uow.commits == 0
 
 
 # --- registration races and input limits ---
 
 
-class FakeEmptyUsersRepo:
-    """No user exists yet, so the services' existence check passes."""
-
-    def __init__(self):
-        self.added: list[User] = []
-
-    async def get_by_email(self, email: str) -> User | None:
-        return None
-
-    async def get_by_github_id(self, github_id: int) -> User | None:
-        return None
-
-    async def add(self, user: User):
-        self.added.append(user)
-
-
-class UniqueViolationSession:
-    """Behaves like the database when a concurrent registration inserted the same user first."""
-
-    def __init__(self):
-        self.rolled_back = False
-
-    async def commit(self):
-        raise IntegrityError(
-            "INSERT INTO user ...", {}, Exception("duplicate key value violates unique constraint")
-        )
-
-    async def rollback(self):
-        self.rolled_back = True
+def test_register_creates_user_and_session_in_one_transaction():
+    uow = FakeUnitOfWork()
+    register = EmailRegisterCredentials(email="a@example.com", password="correct horse")
+    response = asyncio.run(services.register_with_password(register, uow))
+    assert [u.id for u in uow.users.users] == [response.user_id]
+    assert len(uow.refresh_tokens.rows) == 1
+    assert uow.commits == 1
 
 
 def test_concurrent_registration_raises_user_already_exists():
-    users: Any = FakeEmptyUsersRepo()
-    session: Any = UniqueViolationSession()
-    user_create = UserCreateByEmail(email="a@example.com", password="hash", salt="salt")
+    # A concurrent registration inserted the same email between the existence check and the commit
+    uow = FakeUnitOfWork(failing_commits=1)
+    register = EmailRegisterCredentials(email="a@example.com", password="correct horse")
     with pytest.raises(UserAlreadyExists):
-        asyncio.run(user_services.register_user_by_email(user_create, users, session))
-    assert session.rolled_back
+        asyncio.run(services.register_with_password(register, uow))
+    assert uow.commits == 0
 
 
 def test_credentials_length_limits():
@@ -402,28 +403,24 @@ class InMemoryUsersRepo:
     async def add(self, user: User):
         self.users.append(user)
 
-
-class NoopSession:
-    async def commit(self):
+    async def lock(self, user: User):
         pass
 
 
 def test_register_and_login_with_different_case():
-    # Typed as Any: in-memory stand-ins for the repositories and the session
-    users: Any = InMemoryUsersRepo()
-    tokens: Any = FakeTokenRepo()
-    session: Any = NoopSession()
+    users = InMemoryUsersRepo()
+    uow = FakeUnitOfWork(users=users)
     register = EmailRegisterCredentials(email="John.Doe@Gmail.COM", password="correct horse")
-    asyncio.run(services.register_with_password(register, users, tokens, session))
+    asyncio.run(services.register_with_password(register, uow))
     assert users.users[0].email == "john.doe@gmail.com"
 
     for typed in ("john.doe@gmail.com", "JOHN.DOE@GMAIL.COM"):
         login = EmailLoginCredentials(email=typed, password="correct horse")
-        assert asyncio.run(services.login_with_password(login, users, tokens, session)).access_token
+        assert asyncio.run(services.login_with_password(login, uow)).access_token
 
     assert not asyncio.run(
         services.is_email_available(
-            EmailRegisterCredentials(email="JOHN.doe@gmail.com", password="password").email, users
+            EmailRegisterCredentials(email="JOHN.doe@gmail.com", password="password").email, uow
         )
     )
 
@@ -481,11 +478,10 @@ def login_github(monkeypatch):
 
     monkeypatch.setattr(services, "exchange_code_for_token", exchange_code_for_token)
 
-    def login(users, emails, github_id=7):
+    def login(users, emails, github_id=7, failing_commits=0):
         client = _github_client(emails, github_id)
-        tokens: Any = FakeTokenRepo()
-        session: Any = NoopSession()
-        return asyncio.run(services.login_with_github("code", users, tokens, session, client))
+        uow = FakeUnitOfWork(users=users, failing_commits=failing_commits)
+        return asyncio.run(services.login_with_github("code", uow, client))
 
     return login
 
@@ -494,7 +490,7 @@ PRIMARY = [{"email": "Octo@Example.com", "primary": True, "verified": True}]
 
 
 def test_github_first_login_stores_email(login_github):
-    users: Any = InMemoryGithubUsersRepo()
+    users = InMemoryGithubUsersRepo()
     login_github(users, PRIMARY)
     assert [(u.github_id, u.email, u.password) for u in users.users] == [(7, "octo@example.com", None)]
 
@@ -502,15 +498,37 @@ def test_github_first_login_stores_email(login_github):
     assert len(users.users) == 1
 
 
-def test_github_login_fills_missing_email(login_github):
-    users: Any = InMemoryGithubUsersRepo()
+def test_github_first_login_after_concurrent_registration_logs_in(login_github):
+    # A concurrent first login with the same GitHub account registered it between the checks and the commit
+    users = InMemoryGithubUsersRepo()
+    tokens = login_github(users, PRIMARY, failing_commits=1)
+    assert decode_token(tokens.access_token, expected_type="access")["userId"] == users.users[0].id
+
+
+class RejectingUsersRepo(InMemoryGithubUsersRepo):
+    """Registrations never land, as when the database rejects the insert."""
+
+    async def add(self, user: User):
+        pass
+
+
+def test_github_first_login_with_email_taken_meanwhile_raises_user_already_exists(login_github):
+    # A concurrent registration took the GitHub email between the checks and the commit
+    with pytest.raises(UserAlreadyExists):
+        login_github(RejectingUsersRepo(), PRIMARY, failing_commits=1)
+
+
+def test_github_login_leaves_the_stored_email_alone(login_github):
+    # The email is taken from GitHub at registration only; a later GitHub email change isn't synced
+    users = InMemoryGithubUsersRepo()
     users.users.append(User(id=USER_ID, email=None, password=None, salt=None, github_id=7))
-    login_github(users, PRIMARY)
-    assert users.users[0].email == "octo@example.com"
+    tokens = login_github(users, PRIMARY)
+    assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
+    assert users.users[0].email is None
 
 
 def test_github_login_with_email_of_password_account_requires_link(login_github):
-    users: Any = InMemoryGithubUsersRepo()
+    users = InMemoryGithubUsersRepo()
     password_user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
     users.users.append(password_user)
 
@@ -524,7 +542,7 @@ def test_github_login_with_email_of_password_account_requires_link(login_github)
 
 
 def test_github_login_with_email_of_account_linked_to_other_github(login_github):
-    users: Any = InMemoryGithubUsersRepo()
+    users = InMemoryGithubUsersRepo()
     other = User(id=USER_ID, email="octo@example.com", password=None, salt=None, github_id=99)
     users.users.append(other)
 
@@ -532,17 +550,6 @@ def test_github_login_with_email_of_account_linked_to_other_github(login_github)
         login_github(users, PRIMARY)
     assert users.users == [other]
     assert other.github_id == 99
-
-
-def test_github_user_without_email_does_not_take_email_of_another_account(login_github):
-    # A GitHub user registered before emails were stored keeps logging in, without the taken email
-    users: Any = InMemoryGithubUsersRepo()
-    users.users.append(
-        User(id=uuid.uuid7(), email="octo@example.com", password="x", salt="y", github_id=None)
-    )
-    users.users.append(User(id=USER_ID, email=None, password=None, salt=None, github_id=7))
-    login_github(users, PRIMARY)
-    assert users.users[1].email is None
 
 
 @pytest.mark.parametrize(
@@ -560,10 +567,9 @@ def _github_router_error(monkeypatch, error: Exception) -> HTTPException:
         raise error
 
     monkeypatch.setattr(auth_router.services, "login_with_github", login_with_github)
-    session: Any = NoopSession()
     client: Any = None
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(auth_router.login_github(GithubCode(code="code"), session, client))
+        asyncio.run(auth_router.login_github(GithubCode(code="code"), FakeUnitOfWork(), client))
     return exc.value
 
 
@@ -591,20 +597,65 @@ def test_github_router_email_taken_response(monkeypatch, raised):
 # --- linking GitHub to an existing account ---
 
 
-def test_link_github_sets_github_id():
+def test_user_from_password():
+    user = User.from_password(email="a@example.com", password="correct horse")
+    assert (user.email, user.github_id) == ("a@example.com", None)
+    assert user.id.version == 7
+    # Stored hashed and salted: the same password gets another hash for another user
+    assert user.password not in (None, "correct horse")
+    assert user.password != User.from_password(email="b@example.com", password="correct horse").password
+    user.check_password("correct horse")
+    with pytest.raises(WrongPassword):
+        user.check_password("wrong horse")
+
+
+def test_user_from_github():
+    user = User.from_github(github_id=GITHUB_ID, email="octo@example.com")
+    assert (user.github_id, user.email, user.password, user.salt) == (
+        GITHUB_ID,
+        "octo@example.com",
+        None,
+        None,
+    )
+    assert user.id.version == 7
+    assert User.from_github(github_id=GITHUB_ID, email="octo@example.com").id != user.id
+
+
+def test_user_link_github_sets_github_id():
     user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
-    session: Any = NoopSession()
-    asyncio.run(user_services.link_github(user, GITHUB_ID, session))
+    user.link_github(GITHUB_ID)
     assert user.github_id == GITHUB_ID
 
 
-def test_concurrent_link_github_raises_user_already_exists():
-    # The same GitHub id was linked to or registered as another account between the caller's check and commit
-    user = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
-    session: Any = UniqueViolationSession()
-    with pytest.raises(UserAlreadyExists):
-        asyncio.run(user_services.link_github(user, GITHUB_ID, session))
-    assert session.rolled_back
+@pytest.mark.parametrize("password, github_id", [("x", 99), (None, None)], ids=["linked", "no-password"])
+def test_user_link_github_rejected_when_it_cannot_link(password, github_id):
+    salt = "y" if password else None
+    user = User(id=USER_ID, email="octo@example.com", password=password, salt=salt, github_id=github_id)
+    with pytest.raises(CannotLinkGithub):
+        user.link_github(GITHUB_ID)
+    assert user.github_id == github_id
+
+
+def test_user_check_password():
+    user = User(id=USER_ID, email="a@b.c", password=NODE_HASH, salt=NODE_SALT, github_id=None)
+    user.check_password("pässword 123")  # doesn't raise
+    with pytest.raises(WrongPassword):
+        user.check_password("wrong password")
+
+
+def test_user_without_password_rejects_any_password():
+    user = User(id=USER_ID, email="a@b.c", password=None, salt=None, github_id=7)
+    with pytest.raises(WrongPassword):
+        user.check_password("")
+
+
+def test_user_domain_does_not_depend_on_auth():
+    # Auth builds on users, not the other way round: auth translates the user errors (WrongPassword,
+    # CannotLinkGithub) into its own
+    tree = ast.parse(inspect.getsource(user_domain))
+    imported = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    imported |= {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    assert not [m for m in imported if m.split(".")[:2] == ["vce", "auth"]]
 
 
 # --- redeeming the pending link token with the account's password ---
@@ -616,44 +667,44 @@ def _password_user(github_id: int | None = None) -> User:
     return User(id=USER_ID, email="octo@example.com", password=NODE_HASH, salt=NODE_SALT, github_id=github_id)
 
 
-def _link_pending(users, token: str, password: str = NODE_PASSWORD):
-    tokens: Any = FakeTokenRepo()
-    session: Any = NoopSession()
-    return asyncio.run(services.link_github_with_password(token, password, users, tokens, session))
+def _link_pending(uow: FakeUnitOfWork, token: str, password: str = NODE_PASSWORD):
+    return asyncio.run(services.link_github_with_password(token, password, uow))
 
 
 def test_link_pending_links_github_and_logs_in(login_github):
-    users: Any = InMemoryGithubUsersRepo()
+    users = InMemoryGithubUsersRepo()
     user = _password_user()
     users.users.append(user)
+    uow = FakeUnitOfWork(users=users)
 
-    tokens = _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+    tokens = _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
     assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
     assert user.github_id == 7
+    # Linking and storing the refresh token are one transaction: a failure can't leave a link without a login
+    assert len(uow.refresh_tokens.rows) == 1
+    assert uow.commits == 1
 
     # The next GitHub login finds the account by its GitHub id, and password login still works
     tokens = login_github(users, PRIMARY)
     assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
     assert users.users == [user]
     login = EmailLoginCredentials(email="octo@example.com", password=NODE_PASSWORD)
-    tokens_repo: Any = FakeTokenRepo()
-    session: Any = NoopSession()
-    assert asyncio.run(services.login_with_password(login, users, tokens_repo, session)).access_token
+    assert asyncio.run(services.login_with_password(login, FakeUnitOfWork(users=users))).access_token
 
 
 def test_link_pending_with_wrong_password_rejected():
-    users: Any = InMemoryGithubUsersRepo()
+    uow = FakeUnitOfWork()
     user = _password_user()
-    users.users.append(user)
+    uow.users.users.append(user)
     with pytest.raises(InvalidCredentials):
-        _link_pending(users, create_github_pending_link_token(USER_ID, 7), password="wrong password")
+        _link_pending(uow, create_github_pending_link_token(USER_ID, 7), password="wrong password")
     assert user.github_id is None
+    assert uow.commits == 0
 
 
 def test_link_pending_for_deleted_user_rejected():
-    users: Any = InMemoryGithubUsersRepo()
     with pytest.raises(InvalidCredentials):
-        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+        _link_pending(FakeUnitOfWork(), create_github_pending_link_token(USER_ID, 7))
 
 
 @pytest.mark.parametrize(
@@ -666,53 +717,168 @@ def test_link_pending_for_deleted_user_rejected():
     ids=["expired", "tampered", "access-token"],
 )
 def test_link_pending_with_invalid_token_rejected(token):
-    users: Any = InMemoryGithubUsersRepo()
+    uow = FakeUnitOfWork()
     user = _password_user()
-    users.users.append(user)
+    uow.users.users.append(user)
     with pytest.raises(InvalidToken):
-        _link_pending(users, token())
+        _link_pending(uow, token())
     assert user.github_id is None
 
 
 def test_link_pending_when_account_got_github_meanwhile_rejected():
-    users: Any = InMemoryGithubUsersRepo()
-    users.users.append(_password_user(github_id=99))
+    uow = FakeUnitOfWork()
+    uow.users.users.append(_password_user(github_id=99))
     with pytest.raises(GithubAlreadyLinked):
-        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+        _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
+    assert uow.users.users[0].github_id == 99
+
+
+class ConcurrentlyLinkedUsersRepo(InMemoryGithubUsersRepo):
+    """While the request waits for the row lock, a concurrent request links another GitHub account to the
+    user and commits; the locked re-read sees that link."""
+
+    async def lock(self, user: User):
+        user.github_id = 99
+
+
+def test_link_pending_when_account_linked_while_waiting_for_lock_rejected():
+    users = ConcurrentlyLinkedUsersRepo()
+    users.users.append(_password_user())
+    uow = FakeUnitOfWork(users=users)
+    with pytest.raises(GithubAlreadyLinked):
+        _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
     assert users.users[0].github_id == 99
+    assert uow.commits == 0
 
 
 def test_link_pending_when_github_id_now_on_another_account_rejected():
-    users: Any = InMemoryGithubUsersRepo()
+    uow = FakeUnitOfWork()
     user = _password_user()
-    users.users.append(user)
-    users.users.append(User(id=uuid.uuid7(), email=None, password=None, salt=None, github_id=7))
+    uow.users.users.append(user)
+    uow.users.users.append(User(id=uuid.uuid7(), email=None, password=None, salt=None, github_id=7))
     with pytest.raises(GithubAlreadyLinked):
-        _link_pending(users, create_github_pending_link_token(USER_ID, 7))
+        _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
     assert user.github_id is None
+
+
+def test_link_pending_when_github_id_taken_before_commit_rejected():
+    # The same GitHub id was linked to or registered as another account between the check and the commit
+    uow = FakeUnitOfWork(failing_commits=1)
+    uow.users.users.append(_password_user())
+    with pytest.raises(GithubAlreadyLinked):
+        _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
+    assert uow.commits == 0
 
 
 @pytest.mark.parametrize(
     "raised, status",
-    [
-        (InvalidToken("expired"), 401),
-        (InvalidCredentials(), 401),
-        (GithubAlreadyLinked(), 409),
-        (UserAlreadyExists(), 409),
-    ],
+    [(InvalidToken("expired"), 401), (InvalidCredentials(), 401), (GithubAlreadyLinked(), 409)],
 )
 def test_link_pending_router_errors(monkeypatch, raised, status):
     async def link_github_with_password(*args):
         raise raised
 
     monkeypatch.setattr(auth_router.services, "link_github_with_password", link_github_with_password)
-    session: Any = NoopSession()
     body = GithubPendingLinkRequest(pending_link_token="token", password="password")
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(auth_router.link_github_pending(body, session))
+        asyncio.run(auth_router.link_github_pending(body, FakeUnitOfWork()))
     assert exc.value.status_code == status
 
 
 def test_link_pending_request_password_length_limit():
     with pytest.raises(ValidationError):
         GithubPendingLinkRequest(pending_link_token="token", password="x" * (PASSWORD_MAX_LENGTH + 1))
+
+
+# --- current user ---
+
+
+def test_user_from_access_token():
+    uow = FakeUnitOfWork()
+    user = _password_user()
+    uow.users.users.append(user)
+    assert asyncio.run(services.get_user_from_access_token(create_access_token(USER_ID), uow)) is user
+    assert uow.commits == 0
+
+
+def test_user_from_access_token_of_deleted_user_rejected():
+    with pytest.raises(InvalidToken):
+        asyncio.run(services.get_user_from_access_token(create_access_token(USER_ID), FakeUnitOfWork()))
+
+
+# --- SQLAlchemy unit of work ---
+
+
+class DriverError(Exception):
+    """Like asyncpg's errors as SQLAlchemy wraps them: they carry the Postgres SQLSTATE."""
+
+    def __init__(self, sqlstate: str):
+        super().__init__(f"SQLSTATE {sqlstate}")
+        self.sqlstate = sqlstate
+
+
+class RecordingSession:
+    def __init__(self, failing_sqlstate: str | None = None):
+        self.calls: list[str] = []
+        self.failing_sqlstate = failing_sqlstate
+
+    async def commit(self):
+        self.calls.append("commit")
+        if self.failing_sqlstate:
+            raise IntegrityError("INSERT INTO user ...", {}, DriverError(self.failing_sqlstate))
+
+    async def rollback(self):
+        self.calls.append("rollback")
+
+    async def close(self):
+        self.calls.append("close")
+
+
+def test_sqlalchemy_uow_opens_a_session_per_block_and_closes_it():
+    sessions: list[RecordingSession] = []
+
+    def session_factory():
+        sessions.append(RecordingSession())
+        return sessions[-1]
+
+    factory: Any = session_factory
+    uow = SqlAlchemyUnitOfWork(factory)
+
+    async def use():
+        async with uow:
+            assert uow.users.session is uow.refresh_tokens.session is sessions[-1]
+            await uow.commit()
+        with pytest.raises(RuntimeError):
+            async with uow:
+                raise RuntimeError
+
+    asyncio.run(use())
+    # close() rolls back what wasn't committed without expiring the loaded objects (rollback() would), so a
+    # User read in the block stays readable after it, e.g. by /auth/me
+    assert [s.calls for s in sessions] == [["commit", "close"], ["close"]]
+
+
+def _commit_failing_with(sqlstate: str, expected: type[Exception]) -> RecordingSession:
+    session = RecordingSession(failing_sqlstate=sqlstate)
+    factory: Any = lambda: session
+    uow = SqlAlchemyUnitOfWork(factory)
+
+    async def use():
+        async with uow:
+            with pytest.raises(expected):
+                await uow.commit()
+            # Rolled back, so the block can go on using the session, e.g. to look up who got there first
+            assert session.calls == ["commit", "rollback"]
+
+    asyncio.run(use())
+    return session
+
+
+def test_sqlalchemy_uow_rolls_back_a_commit_that_hits_a_unique_constraint():
+    session = _commit_failing_with("23505", UniqueViolation)
+    assert session.calls == ["commit", "rollback", "close"]
+
+
+def test_sqlalchemy_uow_raises_other_integrity_errors_as_they_are():
+    # e.g. ck_user_email_lowercase: a bug to surface, not a race to report as "already exists"
+    _commit_failing_with("23514", IntegrityError)

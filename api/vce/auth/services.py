@@ -1,212 +1,201 @@
 from uuid import UUID
 
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from vce.auth.domain import authenticate
 from vce.auth.exceptions import (
     GithubAlreadyLinked,
     GithubEmailTaken,
     GithubLinkRequired,
-    InvalidCredentials,
     InvalidToken,
     RefreshTokenReused,
 )
-from vce.auth.github import exchange_code_for_token, get_github_user
-from vce.auth.repository import RefreshTokenRepository
+from vce.auth.github import GithubUser, exchange_code_for_token, get_github_user
 from vce.auth.schemas import EmailLoginCredentials, EmailRegisterCredentials, RegisterResponse, TokenPair
 from vce.auth.security import (
     create_access_token,
     create_github_pending_link_token,
     create_refresh_token,
     decode_token,
-    generate_salt,
-    hash_password,
-    verify_password,
 )
+from vce.uow import AbstractUnitOfWork, UniqueViolation
 from vce.user.domain import User
-from vce.user.exceptions import UserAlreadyExists
-from vce.user.repository import UsersRepository
-from vce.user.schemas import UserCreateByEmail, UserCreateByGithub
-from vce.user.services import (
-    get_user_by_email,
-    get_user_by_github_id,
-    link_github,
-    register_user_by_email,
-    register_user_by_github,
-    set_missing_email,
-)
+from vce.user.exceptions import CannotLinkGithub, UserAlreadyExists
 from vce.utils import get_logger
 
 LOGGER = get_logger(__name__)
 
 
 async def issue_token_pair(
-    user_id: UUID, token_repo: RefreshTokenRepository, session: AsyncSession, family_id: UUID | None = None
+    user_id: UUID, uow: AbstractUnitOfWork, family_id: UUID | None = None
 ) -> TokenPair:
-    """Issue a token pair; without family_id a new refresh token family (session) is started."""
+    """Issue a token pair; without family_id a new refresh token family (session) is started. The refresh
+    token is valid once the caller commits."""
     access_token = create_access_token(user_id)
     refresh_token = create_refresh_token(user_id, family_id)
-    await token_repo.add(refresh_token)
-    await session.commit()
+    await uow.refresh_tokens.add(refresh_token)
     return TokenPair(access_token=access_token, refresh_token=refresh_token.token)
 
 
-async def start_session(
-    user_id: UUID, token_repo: RefreshTokenRepository, session: AsyncSession
-) -> TokenPair:
+async def start_session(user_id: UUID, uow: AbstractUnitOfWork) -> TokenPair:
     """Start a new refresh token family (one per login) and issue the first token pair."""
-    return await issue_token_pair(user_id, token_repo, session)
+    return await issue_token_pair(user_id, uow)
 
 
 async def register_with_password(
-    creds: EmailRegisterCredentials,
-    user_repo: UsersRepository,
-    token_repo: RefreshTokenRepository,
-    session: AsyncSession,
+    creds: EmailRegisterCredentials, uow: AbstractUnitOfWork
 ) -> RegisterResponse:
-    salt = generate_salt()
-    user_create = UserCreateByEmail(
-        email=creds.email, password=hash_password(creds.password, salt), salt=salt
-    )
-    created = await register_user_by_email(user_create=user_create, repo=user_repo, session=session)
-    tokens = await start_session(created.id, token_repo, session)
-    LOGGER.info("User with id=%s registered", created.id)
-    return RegisterResponse(user_id=created.id, **tokens.model_dump())
+    async with uow:
+        if await uow.users.get_by_email(creds.email):
+            raise UserAlreadyExists
+        user = User.from_password(email=creds.email, password=creds.password)
+        await uow.users.add(user)
+        tokens = await start_session(user.id, uow)
+        try:
+            await uow.commit()
+        except UniqueViolation as e:
+            raise UserAlreadyExists from e
+    LOGGER.info("User with id=%s registered", user.id)
+    return RegisterResponse(user_id=user.id, **tokens.model_dump())
 
 
-async def is_email_available(email: str, repo: UsersRepository) -> bool:
-    return await repo.get_by_email(email) is None
+async def is_email_available(email: str, uow: AbstractUnitOfWork) -> bool:
+    async with uow:
+        return await uow.users.get_by_email(email) is None
 
 
-async def login_with_password(
-    creds: EmailLoginCredentials,
-    repo: UsersRepository,
-    token_repo: RefreshTokenRepository,
-    session: AsyncSession,
-) -> TokenPair:
-    user = check_password(await repo.get_by_email(creds.email), creds.password)
+async def login_with_password(creds: EmailLoginCredentials, uow: AbstractUnitOfWork) -> TokenPair:
+    async with uow:
+        user = authenticate(await uow.users.get_by_email(creds.email), creds.password)
+        tokens = await start_session(user.id, uow)
+        await uow.commit()
     LOGGER.info("User with id=%s logged in with password", user.id)
-    return await start_session(user.id, token_repo, session)
+    return tokens
 
 
-def check_password(user: User | None, password: str) -> User:
-    """
-    The one place passwords are checked (password login and GitHub linking), so throttling added here
-    later covers every endpoint that takes a password. Raises InvalidCredentials for a missing user, an
-    account without a password, or a wrong password alike.
-    """
-    if user is None or user.password is None or user.salt is None:
-        raise InvalidCredentials
-    if not verify_password(password, user.password, user.salt):
-        raise InvalidCredentials
-    return user
-
-
-async def login_with_github(
-    code: str,
-    repo: UsersRepository,
-    token_repo: RefreshTokenRepository,
-    session: AsyncSession,
-    client: AsyncClient,
-) -> TokenPair:
+async def login_with_github(code: str, uow: AbstractUnitOfWork, client: AsyncClient) -> TokenPair:
     github_access_token = await exchange_code_for_token(client, code)
     github_user = await get_github_user(client, github_access_token)
 
-    user = await get_user_by_github_id(github_user.id, repo=repo)
-    if user:
-        user_id = user.id
-        if await set_missing_email(user, github_user.email, repo=repo, session=session):
-            LOGGER.info("User with id=%s got its email from GitHub", user_id)
-    else:
-        # Accounts are never merged by email: a password account is linked only once its password is confirmed
-        email_owner = await get_user_by_email(github_user.email, repo=repo)
-        if email_owner is not None:
-            if email_owner.can_link_github:
-                LOGGER.info(
-                    "GitHub id=%s needs a password to link to user id=%s", github_user.id, email_owner.id
-                )
-                token = create_github_pending_link_token(email_owner.id, github_user.id)
-                raise GithubLinkRequired(github_user.email, token)
-            raise GithubEmailTaken
-        user_create = UserCreateByGithub(github_id=github_user.id, email=github_user.email)
-        try:
-            user_id = (await register_user_by_github(user_create=user_create, repo=repo, session=session)).id
-            LOGGER.info("User with id=%s registered via GitHub", user_id)
-        except UserAlreadyExists:
-            # Either the GitHub email was taken by a concurrent registration (re-raised for the router), or a
-            # concurrent first login with the same GitHub account registered it a moment earlier
-            existing = await get_user_by_github_id(github_user.id, repo=repo)
-            if existing is None:
-                raise
-            user_id = existing.id
-
+    async with uow:
+        user = await uow.users.get_by_github_id(github_user.id)
+        if user:
+            user_id = user.id
+        else:
+            await check_github_email_is_free(github_user, uow)
+            user_id = await register_github_user(github_user, uow)
+        tokens = await start_session(user_id, uow)
+        await uow.commit()
     LOGGER.info("User with id=%s logged in with GitHub", user_id)
-    return await start_session(user_id, token_repo, session)
+    return tokens
+
+
+async def check_github_email_is_free(github_user: GithubUser, uow: AbstractUnitOfWork) -> None:
+    """
+    Accounts are never merged by email. Raises GithubLinkRequired, with a pending link token, when the
+    GitHub email belongs to a password account: its password links the two (see link_github_with_password).
+    Raises GithubEmailTaken when it belongs to an account that can't be linked.
+    """
+    email_owner = await uow.users.get_by_email(github_user.email)
+    if email_owner is None:
+        return
+    if email_owner.can_link_github:
+        LOGGER.info("GitHub id=%s needs a password to link to user id=%s", github_user.id, email_owner.id)
+        token = create_github_pending_link_token(email_owner.id, github_user.id)
+        raise GithubLinkRequired(github_user.email, token)
+    raise GithubEmailTaken
+
+
+async def register_github_user(github_user: GithubUser, uow: AbstractUnitOfWork) -> UUID:
+    """
+    Register the GitHub account as a new user and return its id. Committed on its own, ahead of the login,
+    so that a concurrent request taking the GitHub account or the email fails only this step: when a
+    concurrent first login with the same GitHub account registered it a moment earlier, that user's id is
+    returned; when a concurrent registration took the email, UserAlreadyExists is raised for the router.
+    """
+    user = User.from_github(github_id=github_user.id, email=github_user.email)
+    await uow.users.add(user)
+    try:
+        await uow.commit()
+    except UniqueViolation as e:
+        existing = await uow.users.get_by_github_id(github_user.id)
+        if existing is None:
+            raise UserAlreadyExists from e
+        return existing.id
+    LOGGER.info("User with id=%s registered via GitHub", user.id)
+    return user.id
 
 
 async def link_github_with_password(
-    pending_link_token: str,
-    password: str,
-    repo: UsersRepository,
-    token_repo: RefreshTokenRepository,
-    session: AsyncSession,
+    pending_link_token: str, password: str, uow: AbstractUnitOfWork
 ) -> TokenPair:
     """
     Redeem the pending link token from a GitHub login (see login_with_github) with the account's password:
     the token proves the GitHub account, the password proves the existing account. Links the two and logs
-    the user in.
+    the user in, in one transaction.
     """
     payload = decode_token(pending_link_token, expected_type="github_pending_link")
-    user = check_password(await repo.get_by_id(payload["userId"]), password)
     github_id: int = payload["githubId"]
 
-    # The token is valid for minutes, so check again what the GitHub login saw
-    if not user.can_link_github or await get_user_by_github_id(github_id, repo=repo):
-        raise GithubAlreadyLinked
-    await link_github(user, github_id, session)
+    async with uow:
+        user = authenticate(await uow.users.get_by_id(payload["userId"]), password)
+        await uow.users.lock(user)
+        # The token is valid for minutes, so check again what the GitHub login saw
+        if await uow.users.get_by_github_id(github_id):
+            raise GithubAlreadyLinked
+        try:
+            user.link_github(github_id)
+        except CannotLinkGithub as e:
+            raise GithubAlreadyLinked from e
+        tokens = await start_session(user.id, uow)
+        try:
+            await uow.commit()
+        except UniqueViolation as e:
+            raise GithubAlreadyLinked from e
     LOGGER.info("User with id=%s linked GitHub id=%s", user.id, github_id)
-    return await start_session(user.id, token_repo, session)
+    return tokens
 
 
-async def rotate_refresh_token(
-    refresh_token: str, repo: UsersRepository, token_repo: RefreshTokenRepository, session: AsyncSession
-) -> TokenPair:
+async def rotate_refresh_token(refresh_token: str, uow: AbstractUnitOfWork) -> TokenPair:
     payload = decode_token(refresh_token, expected_type="refresh")
 
-    record = await token_repo.consume(payload["jti"])
-    if record is None:
-        # Signature is valid but token is no longer whitelisted: it was already rotated or revoked.
-        # Treat as theft and kill the whole session (family).
-        await token_repo.revoke_family(payload["fam"])
-        await session.commit()
-        LOGGER.warning(
-            "Refresh token reuse detected for user id=%s, family %s revoked",
-            payload["userId"],
-            payload["fam"],
-        )
-        raise RefreshTokenReused
+    async with uow:
+        record = await uow.refresh_tokens.consume(payload["jti"])
+        if record is None:
+            await uow.refresh_tokens.revoke_family(payload["fam"])
+            await uow.commit()
+            LOGGER.warning(
+                "Refresh token reuse detected for user id=%s, family %s revoked",
+                payload["userId"],
+                payload["fam"],
+            )
+            raise RefreshTokenReused
 
-    user = await repo.get_by_id(record.user_id)
-    if not user:
-        await session.commit()
-        raise InvalidToken("User in refresh token does not exist")
+        user = await uow.users.get_by_id(record.user_id)
+        if not user:
+            await uow.commit()
+            raise InvalidToken("User in refresh token does not exist")
 
-    await token_repo.delete_expired_for_user(record.user_id)
-    return await issue_token_pair(record.user_id, token_repo, session, family_id=record.family_id)
+        await uow.refresh_tokens.delete_expired_for_user(record.user_id)
+        tokens = await issue_token_pair(record.user_id, uow, family_id=record.family_id)
+        await uow.commit()
+    return tokens
 
 
-async def logout(refresh_token: str, token_repo: RefreshTokenRepository, session: AsyncSession) -> None:
+async def logout(refresh_token: str, uow: AbstractUnitOfWork) -> None:
     try:
         payload = decode_token(refresh_token, expected_type="refresh")
     except InvalidToken:
         return
-    await token_repo.revoke_family(payload["fam"])
-    await session.commit()
+    async with uow:
+        await uow.refresh_tokens.revoke_family(payload["fam"])
+        await uow.commit()
 
 
-async def get_user_from_access_token(token: str, repo: UsersRepository) -> User:
+async def get_user_from_access_token(token: str, uow: AbstractUnitOfWork) -> User:
     payload = decode_token(token, expected_type="access")
-    user = await repo.get_by_id(payload["userId"])
+    async with uow:
+        user = await uow.users.get_by_id(payload["userId"])
     if not user:
         raise InvalidToken("User in access token does not exist")
     return user

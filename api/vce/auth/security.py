@@ -1,7 +1,3 @@
-import hashlib
-import hmac
-import secrets
-import unicodedata
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,11 +19,6 @@ if not JWT_SECRET_KEY:
     raise RuntimeError("Missing JWT_SECRET_KEY env variable")
 
 
-SCRYPT_N = 16384
-SCRYPT_R = 8
-SCRYPT_P = 1
-SCRYPT_KEY_LENGTH = 64
-
 # Claims each token type carries besides type/aud/iat/exp, by how they are validated
 UUID_CLAIMS: dict[TokenType, list[str]] = {
     "access": ["userId"],
@@ -39,25 +30,6 @@ INT_CLAIMS: dict[TokenType, list[str]] = {
     "refresh": [],
     "github_pending_link": ["githubId"],
 }
-
-
-def generate_salt() -> str:
-    return secrets.token_hex(16)
-
-
-def hash_password(password: str, salt: str) -> str:
-    return hashlib.scrypt(
-        unicodedata.normalize("NFC", password).encode(),
-        salt=salt.encode(),
-        n=SCRYPT_N,
-        r=SCRYPT_R,
-        p=SCRYPT_P,
-        dklen=SCRYPT_KEY_LENGTH,
-    ).hex()
-
-
-def verify_password(password: str, hashed_password: str, salt: str) -> bool:
-    return hmac.compare_digest(hash_password(password, salt), hashed_password)
 
 
 def encode_jwt(claims: dict[str, Any], expiry_seconds: int, now: datetime) -> str:
