@@ -30,11 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[dict[str, Any]]:
 
 app = FastAPI(root_path="/api", lifespan=lifespan, title="Virtual Crypto Exchange")
 
-origins = [
-    "http://localhost:3000",
-    "https://localhost:3000",
-    "https://mmlynarik.com",
-]
+origins = ["http://localhost:3000", "https://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
