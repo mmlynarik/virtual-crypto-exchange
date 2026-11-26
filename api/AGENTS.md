@@ -35,6 +35,9 @@ Backend-level guidance for coding agents working in `Virtual Crypto Exchange API
 
 ## Skill routing
 
+- Adding, changing, reviewing or testing a FastAPI route or a domain's `router.py`:
+  `.agents/skills/fastapi-router/SKILL.md` (the auth domain's route conventions).
+
 
 ## Non-negotiable guardrails
 
