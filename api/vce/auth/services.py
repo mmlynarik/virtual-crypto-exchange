@@ -176,6 +176,8 @@ async def rotate_refresh_token(refresh_token: str, uow: AbstractUnitOfWork) -> T
             await uow.commit()
             raise InvalidToken("User in refresh token does not exist")
 
+        # Lazy cleanup of the user's other sessions that were abandoned (never refreshed or logged out):
+        # their expired tokens fail decoding, so they never reach consume and would otherwise stay forever
         await uow.refresh_tokens.delete_expired_for_user(record.user_id)
         tokens = await _issue_token_pair(record.user_id, uow, family_id=record.family_id)
         await uow.commit()
