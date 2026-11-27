@@ -1,9 +1,10 @@
 """Fakes, constants and helpers shared by the test modules."""
 
+import copy
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Self
 
 import httpx
 import jwt
@@ -146,9 +147,17 @@ MARKET_FIELDS = [
 ]
 
 
+# The repositories with their attributes, and the rows with their fields
+type _Snapshot = tuple[list[tuple[Any, dict[str, Any]]], list[tuple[Any, dict[str, Any]]]]
+
+
 class FakeUnitOfWork(AbstractUnitOfWork):
-    """In-memory stand-in. Counts commits; the first failing_commits of them fail like a unique constraint
-    that a concurrent request got to first."""
+    """
+    In-memory stand-in that keeps the AbstractUnitOfWork rules: what a block doesn't commit is rolled back,
+    on the same objects, as SQLAlchemy reloads them. Counts commits. The first failing_commits of them roll
+    back and fail like a unique constraint that a concurrent request got to first; concurrent_write is that
+    request's committed write, applied at the first failing commit.
+    """
 
     # The in-memory fakes, not the SQLAlchemy repositories
     users: Any
@@ -156,22 +165,72 @@ class FakeUnitOfWork(AbstractUnitOfWork):
     coins: Any
 
     def __init__(
-        self, users: Any = None, refresh_tokens: Any = None, coins: Any = None, failing_commits: int = 0
+        self,
+        users: Any = None,
+        refresh_tokens: Any = None,
+        coins: Any = None,
+        failing_commits: int = 0,
+        concurrent_write: Callable[[], None] | None = None,
     ):
         self.users = users if users is not None else InMemoryGithubUsersRepo()
         self.refresh_tokens = refresh_tokens if refresh_tokens is not None else FakeTokenRepo()
         self.coins = coins if coins is not None else InMemoryCoinRepo()
         self.failing_commits = failing_commits
+        self.concurrent_write = concurrent_write
         self.commits = 0
+
+    async def __aenter__(self) -> Self:
+        self._committed = self._snapshot()
+        return await super().__aenter__()
 
     async def commit(self):
         if self.failing_commits:
             self.failing_commits -= 1
+            await self.rollback()
+            if self.concurrent_write:
+                self.commit_concurrent_write(self.concurrent_write)
+                self.concurrent_write = None
             raise UniqueViolation
         self.commits += 1
+        self._committed = self._snapshot()
 
     async def rollback(self):
-        pass
+        self._restore(self._committed)
+
+    def commit_concurrent_write(self, write: Callable[[], None]) -> None:
+        """Apply a write that a concurrent request committed, so this block's rollback keeps it. Only where
+        the block has nothing uncommitted, which would be kept too."""
+        write()
+        self._committed = self._snapshot()
+
+    def _repos(self) -> list[Any]:
+        return [self.users, self.refresh_tokens, self.coins]
+
+    def _snapshot(self) -> _Snapshot:
+        """The repositories' attributes, with their lists and dicts of rows copied, and each row's fields."""
+        repos = []
+        rows = {}
+        for repo in self._repos():
+            state = {}
+            for name, value in vars(repo).items():
+                if isinstance(value, list | dict):
+                    state[name] = copy.copy(value)
+                    for row in value.values() if isinstance(value, dict) else value:
+                        rows[id(row)] = (row, dict(vars(row)))
+                else:
+                    state[name] = value
+            repos.append((repo, state))
+        return repos, list(rows.values())
+
+    @staticmethod
+    def _restore(snapshot: _Snapshot) -> None:
+        repos, rows = snapshot
+        for repo, state in repos:
+            repo.__dict__.clear()
+            repo.__dict__.update({name: copy.copy(value) for name, value in state.items()})
+        for row, fields in rows:
+            row.__dict__.clear()
+            row.__dict__.update(fields)
 
 
 def password_user(github_id: int | None = None) -> User:

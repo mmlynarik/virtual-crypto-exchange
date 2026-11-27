@@ -66,21 +66,21 @@ def test_github_first_login_stores_email(login_github):
 def test_github_first_login_after_concurrent_registration_logs_in(login_github):
     # A concurrent first login with the same GitHub account registered it between the checks and the commit
     users = InMemoryGithubUsersRepo()
-    tokens = login_github(users, PRIMARY, failing_commits=1)
-    assert decode_token(tokens.access_token, expected_type="access")["userId"] == users.users[0].id
-
-
-class RejectingUsersRepo(InMemoryGithubUsersRepo):
-    """Registrations never land, as when the database rejects the insert."""
-
-    async def add(self, user: User):
-        pass
+    winner = User(id=USER_ID, email="octo@example.com", password=None, salt=None, github_id=7)
+    tokens = login_github(
+        users, PRIMARY, failing_commits=1, concurrent_write=lambda: users.users.append(winner)
+    )
+    assert decode_token(tokens.access_token, expected_type="access")["userId"] == USER_ID
+    assert users.users == [winner]
 
 
 def test_github_first_login_with_email_taken_meanwhile_raises_user_already_exists(login_github):
     # A concurrent registration took the GitHub email between the checks and the commit
+    users = InMemoryGithubUsersRepo()
+    winner = User(id=USER_ID, email="octo@example.com", password="x", salt="y", github_id=None)
     with pytest.raises(UserAlreadyExists):
-        login_github(RejectingUsersRepo(), PRIMARY, failing_commits=1)
+        login_github(users, PRIMARY, failing_commits=1, concurrent_write=lambda: users.users.append(winner))
+    assert users.users == [winner]
 
 
 def test_github_login_leaves_the_stored_email_alone(login_github):

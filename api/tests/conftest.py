@@ -19,9 +19,9 @@ def login_github(monkeypatch):
 
     monkeypatch.setattr(services, "exchange_code_for_token", exchange_code_for_token)
 
-    def login(users, emails, github_id=7, failing_commits=0):
+    def login(users, emails, github_id=7, failing_commits=0, concurrent_write=None):
         client = github_client(emails, github_id)
-        uow = FakeUnitOfWork(users=users, failing_commits=failing_commits)
+        uow = FakeUnitOfWork(users=users, failing_commits=failing_commits, concurrent_write=concurrent_write)
         return asyncio.run(services.login_with_github("code", uow, client))
 
     return login

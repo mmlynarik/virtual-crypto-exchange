@@ -111,14 +111,17 @@ class ConcurrentlyLinkedUsersRepo(InMemoryGithubUsersRepo):
     """While the request waits for the row lock, a concurrent request links another GitHub account to the
     user and commits; the locked re-read sees that link."""
 
+    uow: FakeUnitOfWork
+
     async def lock(self, user: User):
-        user.github_id = 99
+        self.uow.commit_concurrent_write(lambda: user.link_github(99))
 
 
 def test_link_pending_when_account_linked_while_waiting_for_lock_rejected():
     users = ConcurrentlyLinkedUsersRepo()
     users.users.append(password_user())
     uow = FakeUnitOfWork(users=users)
+    users.uow = uow
     with pytest.raises(GithubAlreadyLinked):
         _link_pending(uow, create_github_pending_link_token(USER_ID, 7))
     assert users.users[0].github_id == 99

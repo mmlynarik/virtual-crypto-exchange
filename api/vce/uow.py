@@ -18,10 +18,14 @@ class UniqueViolation(Exception):
 
 class AbstractUnitOfWork(abc.ABC):
     """
-    One database transaction, used as `async with uow:` by a service (see
-    https://www.cosmicpython.com/book/chapter_06_uow). The service commits explicitly; anything not committed
-    when the block ends is rolled back. A block can commit more than once, each commit ending one transaction.
-    Blocks must not nest: each one opens a new session.
+    The services' access to storage (see https://www.cosmicpython.com/book/chapter_06_uow). A service
+    uses the repositories inside an `async with uow:` block. Every implementation keeps these rules:
+
+    - Nothing is saved until the service calls `await uow.commit()`. Whatever isn't committed when the
+      block ends, normally or through an exception, is rolled back.
+    - A block can commit more than once. Each commit saves what came before it, and the block can go on,
+      e.g. after a `UniqueViolation`.
+    - Blocks must not nest. For two separate units of work, use two blocks one after the other.
     """
 
     users: UsersRepository
@@ -45,6 +49,13 @@ class AbstractUnitOfWork(abc.ABC):
 
 
 class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
+    """
+    Each block opens a new database session, which all the repositories share. Each commit ends one
+    transaction, and the next query starts another. Closing the session at the end of the block rolls back
+    the open transaction. Nesting breaks because an inner block would replace the outer block's session
+    and repositories, then close them.
+    """
+
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self.session_factory = session_factory
 
@@ -59,11 +70,19 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
         await self.session.close()
 
     async def commit(self) -> None:
+        """
+        Flushes and commits. An IntegrityError with Postgres SQLSTATE 23505 (unique_violation) becomes
+        UniqueViolation. Other integrity errors (foreign key, check, not null) are bugs, not races, so they
+        are raised as they are. Both roll back first.
+
+        Only the commit translates errors. A query between a write and the commit autoflushes the write,
+        and a duplicate then fails in that query as a plain IntegrityError, so services commit right after
+        their writes.
+        """
         try:
             await self.session.commit()
         except IntegrityError as e:
             await self.rollback()
-            # Other integrity errors (foreign key, check, not null) are bugs, not races: raised as they are
             if getattr(e.orig, "sqlstate", None) != UNIQUE_VIOLATION_SQLSTATE:
                 raise
             raise UniqueViolation from e
