@@ -3,11 +3,11 @@ from httpx import AsyncClient
 from vce.coin.coingecko import get_coin_ids_from_symbol, get_coins_data
 from vce.coin.domain import Coin
 from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound
-from vce.coin.schemas import CGCoinCreate, CGCoinUpdate
+from vce.coin.schemas import CoinCreate, CoinUpdate
 from vce.uow import AbstractUnitOfWork, UniqueViolation
 
 
-async def add_coins(coin: CGCoinCreate, uow: AbstractUnitOfWork, client: AsyncClient) -> list[Coin]:
+async def add_coins(coin: CoinCreate, uow: AbstractUnitOfWork, client: AsyncClient) -> list[Coin]:
     """Store the coins CoinGecko has for the symbol. CoinGecko is asked first, outside the transaction."""
     ids = await get_coin_ids_from_symbol(client, coin.symbol)
     coins = await get_coins_data(client, ids)
@@ -40,7 +40,7 @@ async def delete_coin(id: str, uow: AbstractUnitOfWork) -> None:
         await uow.commit()
 
 
-async def update_coin(id: str, new_coin_values: CGCoinUpdate, uow: AbstractUnitOfWork) -> Coin:
+async def update_coin(id: str, new_coin_values: CoinUpdate, uow: AbstractUnitOfWork) -> Coin:
     async with uow:
         current_coin = await uow.coins.get_by_id(id)
         if not current_coin:

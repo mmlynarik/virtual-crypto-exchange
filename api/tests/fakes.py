@@ -11,8 +11,6 @@ import jwt
 from vce.auth.domain import RefreshToken
 from vce.coin.domain import Coin
 from vce.settings import (
-    GITHUB_EMAILS_URL,
-    GITHUB_USER_URL,
     JWT_ALGORITHM,
     JWT_AUDIENCE,
     JWT_SECRET_KEY,
@@ -52,16 +50,15 @@ def encode_token(**overrides):
 
 def github_client(emails: list[dict[str, Any]], github_id: int = 7) -> httpx.AsyncClient:
     def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if url == GITHUB_USER_URL:
+        if request.url.path == "/user":
             return httpx.Response(
                 200, json={"id": github_id, "login": "octocat", "name": None, "email": None}
             )
-        if url == GITHUB_EMAILS_URL:
+        if request.url.path == "/user/emails":
             return httpx.Response(200, json=emails)
         return httpx.Response(404)
 
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return httpx.AsyncClient(base_url="https://github.test", transport=httpx.MockTransport(handler))
 
 
 class FakeTokenRepo:

@@ -1,7 +1,5 @@
 import os
 
-CG_API_URL = "https://api.coingecko.com/api/v3"
-
 BACKEND_DB_HOST = os.getenv("BACKEND_DB_HOST")
 BACKEND_DB_NAME = os.getenv("BACKEND_DB_NAME")
 BACKEND_DB_USER = os.getenv("BACKEND_DB_USER")
@@ -11,8 +9,6 @@ BACKEND_DB_URL = (
 )
 VS_CURRENCY = os.getenv("VS_CURRENCY", "usd")
 
-# Required by the app, but validated in vce.auth.security (its only user) so that tools that just
-# need DB settings, such as Alembic migrations, can import this module without it.
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 JWT_ALGORITHM = "HS256"
 JWT_AUDIENCE = "vce"
@@ -24,8 +20,9 @@ EMAIL_MAX_LENGTH = 256
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 
+COIN_API_URL = "https://api.coingecko.com/api/v3"
+
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+GITHUB_API_URL = "https://api.github.com"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
-GITHUB_USER_URL = "https://api.github.com/user"
-GITHUB_EMAILS_URL = "https://api.github.com/user/emails"

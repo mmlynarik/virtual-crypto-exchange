@@ -10,7 +10,7 @@ from tests.fakes import FakeUnitOfWork
 from vce.coin import services
 from vce.coin.domain import Coin
 from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound, InvalidCoinSymbol
-from vce.coin.schemas import CGCoinCreate, CGCoinUpdate
+from vce.coin.schemas import CoinCreate, CoinUpdate
 
 MARKETS = {
     "bitcoin": {
@@ -79,7 +79,7 @@ def uow_with(*coins: Coin, failing_commits: int = 0) -> FakeUnitOfWork:
 
 def test_add_coins_stores_the_coins_of_the_symbol():
     uow = uow_with()
-    coins = asyncio.run(services.add_coins(CGCoinCreate(symbol="btc"), uow, coingecko()))
+    coins = asyncio.run(services.add_coins(CoinCreate(symbol="btc"), uow, coingecko()))
     assert [c.id for c in coins] == ["bitcoin"]
     assert list(uow.coins.coins) == ["bitcoin"]
     assert uow.coins.coins["bitcoin"].current_price == 100.0
@@ -90,7 +90,7 @@ def test_add_coins_stores_the_coins_of_the_symbol():
 def test_add_coins_of_stored_symbol_rejected():
     uow = uow_with(stored_coin())
     with pytest.raises(CoinAlreadyExists):
-        asyncio.run(services.add_coins(CGCoinCreate(symbol="btc"), uow, coingecko()))
+        asyncio.run(services.add_coins(CoinCreate(symbol="btc"), uow, coingecko()))
     assert uow.commits == 0
 
 
@@ -98,14 +98,14 @@ def test_add_coins_stored_meanwhile_rejected():
     # A concurrent request stored the same coins between the check and the commit
     uow = uow_with(failing_commits=1)
     with pytest.raises(CoinAlreadyExists):
-        asyncio.run(services.add_coins(CGCoinCreate(symbol="btc"), uow, coingecko()))
+        asyncio.run(services.add_coins(CoinCreate(symbol="btc"), uow, coingecko()))
     assert uow.commits == 0
 
 
 def test_add_coins_of_unknown_symbol_rejected():
     uow = uow_with()
     with pytest.raises(InvalidCoinSymbol):
-        asyncio.run(services.add_coins(CGCoinCreate(symbol="nope"), uow, coingecko()))
+        asyncio.run(services.add_coins(CoinCreate(symbol="nope"), uow, coingecko()))
     assert uow.coins.coins == {}
 
 
@@ -138,7 +138,7 @@ def test_delete_missing_coin_rejected():
 def test_update_coin():
     bitcoin = stored_coin()
     uow = uow_with(bitcoin)
-    values = CGCoinUpdate(
+    values = CoinUpdate(
         name="Bitcoin",
         symbol="btc",
         current_price=2.0,
@@ -154,7 +154,7 @@ def test_update_coin():
 
 
 def test_update_missing_coin_rejected():
-    values = CGCoinUpdate(
+    values = CoinUpdate(
         name="Bitcoin",
         symbol="btc",
         current_price=2.0,

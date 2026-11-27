@@ -7,13 +7,18 @@ from vce.db import SessionMaker
 from vce.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
 
 
-def get_http_client(request: Request) -> AsyncClient:
-    return request.state.http_client
+def get_coin_client(request: Request) -> AsyncClient:
+    return request.state.coingecko_client
+
+
+def get_github_client(request: Request) -> AsyncClient:
+    return request.state.github_client
 
 
 def get_unit_of_work(sessionmaker: SessionMaker) -> AbstractUnitOfWork:
     return SqlAlchemyUnitOfWork(sessionmaker)
 
 
-HTTPClient = Annotated[AsyncClient, Depends(get_http_client)]
+CoinClient = Annotated[AsyncClient, Depends(get_coin_client)]
+GithubClient = Annotated[AsyncClient, Depends(get_github_client)]
 UnitOfWork = Annotated[AbstractUnitOfWork, Depends(get_unit_of_work)]

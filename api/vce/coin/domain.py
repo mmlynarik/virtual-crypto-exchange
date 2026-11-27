@@ -2,8 +2,6 @@ from datetime import datetime
 
 
 class Coin:
-    """CoinGecko coin market data"""
-
     def __init__(
         self,
         id: str,
@@ -27,4 +25,4 @@ class Coin:
         self.last_updated = last_updated
 
     def __repr__(self) -> str:
-        return f"CGCoin(id={self.id!r}, symbol={self.symbol!r}, current_price={self.current_price!r})"
+        return f"Coin(id={self.id!r}, symbol={self.symbol!r}, current_price={self.current_price!r})"

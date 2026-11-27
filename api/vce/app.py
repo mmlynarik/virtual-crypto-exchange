@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from vce.auth.router import router as auth_router
 from vce.coin.router import router as coin_router
 from vce.orm import start_orm_mappers
-from vce.settings import BACKEND_DB_URL, CG_API_URL
+from vce.settings import BACKEND_DB_URL, COIN_API_URL, GITHUB_API_URL
 
 
 @asynccontextmanager
@@ -19,10 +19,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[dict[str, Any]]:
     start_orm_mappers()
     engine = create_async_engine(BACKEND_DB_URL)
     try:
-        async with AsyncClient(base_url=CG_API_URL) as http_client:
+        async with (
+            AsyncClient(base_url=COIN_API_URL) as coin_client,
+            AsyncClient(
+                base_url=GITHUB_API_URL, headers={"Accept": "application/vnd.github+json"}
+            ) as github_client,
+        ):
             yield {
                 "sessionmaker": async_sessionmaker(engine, expire_on_commit=False),
-                "http_client": http_client,
+                "coin_client": coin_client,
+                "github_client": github_client,
             }
     finally:
         await engine.dispose()

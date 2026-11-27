@@ -1,6 +1,6 @@
 ---
 name: fastapi-router
-description: Architectural rules for FastAPI routes in the vce API, taken from the auth domain (vce/auth/router.py), which is the reference implementation. Use when adding, changing, reviewing or testing an endpoint or a domain's router.py, mapping domain exceptions to HTTP errors, adding a dependency such as UnitOfWork, HTTPClient or CurrentUser, choosing status codes or response bodies, or writing request/response schemas.
+description: Architectural rules for FastAPI routes in the vce API, taken from the auth domain (vce/auth/router.py), which is the reference implementation. Use when adding, changing, reviewing or testing an endpoint or a domain's router.py, mapping domain exceptions to HTTP errors, adding a dependency such as UnitOfWork, CoinGeckoClient, GithubClient or CurrentUser, choosing status codes or response bodies, or writing request/response schemas.
 ---
 
 # FastAPI routes
@@ -16,7 +16,7 @@ router predates these rules (see "Known deviations"); don't copy its patterns.
   Paths inside are relative (`/login`, `/github/link-pending`). Use kebab-case for multi-word paths.
 - `vce/app.py` only does `app.include_router(...)`. The app has `root_path="/api"`, so don't put `/api`
   into routes.
-- App-wide resources (the sessionmaker, the shared `httpx.AsyncClient`) are created in the `lifespan` in
+- App-wide resources (the sessionmaker, one `httpx.AsyncClient` per upstream API) are created in the `lifespan` in
   `app.py` and read from `request.state` by dependencies. Routes never create clients, engines or
   sessions.
 
@@ -53,7 +53,8 @@ Write every injected value as an `Annotated` alias, so a route signature reads `
 | Alias | Defined in | Gives |
 |---|---|---|
 | `UnitOfWork` | `vce/dependencies.py` | a fresh, unopened `SqlAlchemyUnitOfWork` |
-| `HTTPClient` | `vce/dependencies.py` | the app-wide `httpx.AsyncClient` from the lifespan |
+| `CoinGeckoClient` | `vce/dependencies.py` | the lifespan's CoinGecko `httpx.AsyncClient` (base URL `CG_API_URL`) |
+| `GithubClient` | `vce/dependencies.py` | the lifespan's GitHub API `httpx.AsyncClient` (base URL `GITHUB_API_URL`, GitHub `Accept` header) |
 | `CurrentUser` | `vce/auth/dependencies.py` | the authenticated `User`, or a 401 |
 
 - A new shared dependency goes in `vce/dependencies.py`. A dependency used by one domain goes in that

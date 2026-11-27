@@ -3,11 +3,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class CGCoinCreate(BaseModel):
+class CoinCreate(BaseModel):
     symbol: str
 
 
-class CGCoinUpdate(BaseModel):
+class CoinUpdate(BaseModel):
     name: str
     symbol: str
     current_price: float
@@ -18,7 +18,7 @@ class CGCoinUpdate(BaseModel):
     last_updated: datetime
 
 
-class CGCoinResponse(BaseModel):
+class CoinResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str

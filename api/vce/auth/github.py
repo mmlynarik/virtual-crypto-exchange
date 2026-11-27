@@ -6,9 +6,7 @@ from vce.settings import (
     EMAIL_MAX_LENGTH,
     GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET,
-    GITHUB_EMAILS_URL,
     GITHUB_TOKEN_URL,
-    GITHUB_USER_URL,
 )
 from vce.user.domain import normalize_email
 
@@ -39,22 +37,21 @@ async def exchange_code_for_token(client: AsyncClient, code: str) -> str:
     return access_token
 
 
-async def get_from_github(client: AsyncClient, url: str, access_token: str):
+async def get_from_github(client: AsyncClient, path: str, access_token: str):
+    """GET a GitHub API path. The client carries the API base URL and Accept header (see vce/app.py)."""
     try:
-        res = await client.get(
-            url, headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"}
-        )
+        res = await client.get(path, headers={"Authorization": f"Bearer {access_token}"})
         res.raise_for_status()
     except HTTPError as e:
-        raise GithubAuthError(f"GitHub request to {url} failed: {e}") from e
+        raise GithubAuthError(f"GitHub request to {path} failed: {e}") from e
     return res.json()
 
 
 async def get_github_user(client: AsyncClient, access_token: str) -> GithubUser:
     """The GitHub account id and its primary email. The email comes from /user/emails (needs the
     user:email scope) rather than /user, which only shows an email the user chose to make public."""
-    data = await get_from_github(client, GITHUB_USER_URL, access_token)
-    emails = await get_from_github(client, GITHUB_EMAILS_URL, access_token)
+    data = await get_from_github(client, "/user", access_token)
+    emails = await get_from_github(client, "/user/emails", access_token)
 
     primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
     if primary is None:

@@ -28,7 +28,7 @@ from vce.auth.schemas import (
     TokenPair,
     UserPublic,
 )
-from vce.dependencies import HTTPClient, UnitOfWork
+from vce.dependencies import GithubClient, UnitOfWork
 from vce.user.exceptions import UserAlreadyExists
 from vce.utils import get_logger
 
@@ -64,7 +64,7 @@ def github_conflict(conflict: GithubConflict) -> HTTPException:
 
 
 @router.post("/github", responses={409: {"model": GithubConflictResponse}})
-async def login_github(body: GithubCode, uow: UnitOfWork, client: HTTPClient) -> TokenPair:
+async def login_github(body: GithubCode, uow: UnitOfWork, client: GithubClient) -> TokenPair:
     try:
         return await services.login_with_github(body.code, uow, client)
     except GithubAuthError as e:
