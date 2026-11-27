@@ -8,7 +8,7 @@ from vce.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
 
 
 def get_coin_client(request: Request) -> AsyncClient:
-    return request.state.coingecko_client
+    return request.state.coin_client
 
 
 def get_github_client(request: Request) -> AsyncClient:

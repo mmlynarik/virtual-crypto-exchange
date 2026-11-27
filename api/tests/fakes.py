@@ -135,7 +135,7 @@ class InMemoryCoinRepo:
                 setattr(stored, field, getattr(coin, field))
 
 
-# What CGCoinRepository.update_market_data updates: name and symbol stay
+# What CoinRepository.update_market_data updates: name and symbol stay
 MARKET_FIELDS = [
     "current_price",
     "market_cap",

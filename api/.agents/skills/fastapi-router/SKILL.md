@@ -1,6 +1,6 @@
 ---
 name: fastapi-router
-description: Architectural rules for FastAPI routes in the vce API, taken from the auth domain (vce/auth/router.py), which is the reference implementation. Use when adding, changing, reviewing or testing an endpoint or a domain's router.py, mapping domain exceptions to HTTP errors, adding a dependency such as UnitOfWork, CoinGeckoClient, GithubClient or CurrentUser, choosing status codes or response bodies, or writing request/response schemas.
+description: Architectural rules for FastAPI routes in the vce API, taken from the auth domain (vce/auth/router.py), which is the reference implementation. Use when adding, changing, reviewing or testing an endpoint or a domain's router.py, mapping domain exceptions to HTTP errors, adding a dependency such as UnitOfWork, CoinClient, GithubClient or CurrentUser, choosing status codes or response bodies, or writing request/response schemas.
 ---
 
 # FastAPI routes
@@ -53,7 +53,7 @@ Write every injected value as an `Annotated` alias, so a route signature reads `
 | Alias | Defined in | Gives |
 |---|---|---|
 | `UnitOfWork` | `vce/dependencies.py` | a fresh, unopened `SqlAlchemyUnitOfWork` |
-| `CoinGeckoClient` | `vce/dependencies.py` | the lifespan's CoinGecko `httpx.AsyncClient` (base URL `CG_API_URL`) |
+| `CoinClient` | `vce/dependencies.py` | the lifespan's CoinGecko `httpx.AsyncClient` (base URL `COIN_API_URL`) |
 | `GithubClient` | `vce/dependencies.py` | the lifespan's GitHub API `httpx.AsyncClient` (base URL `GITHUB_API_URL`, GitHub `Accept` header) |
 | `CurrentUser` | `vce/auth/dependencies.py` | the authenticated `User`, or a 401 |
 

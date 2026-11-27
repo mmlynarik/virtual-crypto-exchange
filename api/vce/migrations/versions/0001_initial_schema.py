@@ -1,4 +1,4 @@
-"""Initial schema: cg_coin and user tables
+"""Initial schema: coin and user tables
 
 This is the schema that existed before Alembic, when tables were created with metadata.create_all().
 
