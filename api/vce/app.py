@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from vce.auth.router import router as auth_router
-from vce.coin.router import router as coin_router
+from vce.coins.router import router as coin_router
 from vce.orm import start_orm_mappers
 from vce.settings import BACKEND_DB_URL, COIN_API_URL, GITHUB_API_URL
 

@@ -7,17 +7,6 @@ class CoinCreate(BaseModel):
     symbol: str
 
 
-class CoinUpdate(BaseModel):
-    name: str
-    symbol: str
-    current_price: float
-    market_cap: float
-    circulating_supply: float
-    total_supply: float
-    max_supply: float
-    last_updated: datetime
-
-
 class CoinResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

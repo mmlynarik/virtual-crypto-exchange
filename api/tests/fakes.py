@@ -10,7 +10,7 @@ import httpx
 import jwt
 
 from vce.auth.domain import RefreshToken
-from vce.coin.domain import Coin
+from vce.coins.domain import Coin
 from vce.settings import (
     JWT_ALGORITHM,
     JWT_AUDIENCE,

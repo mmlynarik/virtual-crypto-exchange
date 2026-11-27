@@ -1,9 +1,9 @@
 from httpx import AsyncClient
 
-from vce.coin.coingecko import get_coin_ids_from_symbol, get_coins_data
-from vce.coin.domain import Coin
-from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound
-from vce.coin.schemas import CoinCreate, CoinUpdate
+from vce.coins.coingecko import get_coin_ids_from_symbol, get_coins_data
+from vce.coins.domain import Coin
+from vce.coins.exceptions import CoinAlreadyExists, CoinNotFound
+from vce.coins.schemas import CoinCreate
 from vce.uow import AbstractUnitOfWork, UniqueViolation
 
 
@@ -38,17 +38,6 @@ async def delete_coin(id: str, uow: AbstractUnitOfWork) -> None:
             raise CoinNotFound(f"Coin with id {id} not found in database")
         await uow.coins.delete(id)
         await uow.commit()
-
-
-async def update_coin(id: str, new_coin_values: CoinUpdate, uow: AbstractUnitOfWork) -> Coin:
-    async with uow:
-        current_coin = await uow.coins.get_by_id(id)
-        if not current_coin:
-            raise CoinNotFound(f"Coin with id {id} not found in database")
-        for attr, value in new_coin_values.model_dump().items():
-            setattr(current_coin, attr, value)
-        await uow.commit()
-    return current_coin
 
 
 async def refresh_coins(uow: AbstractUnitOfWork, coin_client: AsyncClient) -> None:

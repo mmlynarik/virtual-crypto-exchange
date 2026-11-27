@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vce.coin.domain import Coin
+from vce.coins.domain import Coin
 from vce.utils import get_logger
 
 LOGGER = get_logger(__name__)

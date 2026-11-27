@@ -2,8 +2,8 @@ from datetime import datetime
 
 from httpx import AsyncClient
 
-from vce.coin.domain import Coin
-from vce.coin.exceptions import InvalidCoinSymbol
+from vce.coins.domain import Coin
+from vce.coins.exceptions import InvalidCoinSymbol
 from vce.settings import VS_CURRENCY
 
 

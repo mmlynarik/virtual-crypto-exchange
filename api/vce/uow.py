@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from vce.auth.repository import RefreshTokenRepository
-from vce.coin.repository import CoinRepository
+from vce.coins.repository import CoinRepository
 from vce.user.repository import UsersRepository
 
 UNIQUE_VIOLATION_SQLSTATE = "23505"

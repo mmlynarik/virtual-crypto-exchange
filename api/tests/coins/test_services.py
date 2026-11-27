@@ -7,10 +7,10 @@ import httpx
 import pytest
 
 from tests.fakes import FakeUnitOfWork
-from vce.coin import services
-from vce.coin.domain import Coin
-from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound, InvalidCoinSymbol
-from vce.coin.schemas import CoinCreate, CoinUpdate
+from vce.coins import services
+from vce.coins.domain import Coin
+from vce.coins.exceptions import CoinAlreadyExists, CoinNotFound, InvalidCoinSymbol
+from vce.coins.schemas import CoinCreate
 
 MARKETS = {
     "bitcoin": {
@@ -132,41 +132,6 @@ def test_delete_missing_coin_rejected():
     uow = uow_with()
     with pytest.raises(CoinNotFound):
         asyncio.run(services.delete_coin("bitcoin", uow))
-    assert uow.commits == 0
-
-
-def test_update_coin():
-    bitcoin = stored_coin()
-    uow = uow_with(bitcoin)
-    values = CoinUpdate(
-        name="Bitcoin",
-        symbol="btc",
-        current_price=2.0,
-        market_cap=20.0,
-        circulating_supply=10.0,
-        total_supply=21.0,
-        max_supply=21.0,
-        last_updated=datetime.fromisoformat("2026-11-26T10:00:00+00:00"),
-    )
-    assert asyncio.run(services.update_coin("bitcoin", values, uow)) is bitcoin
-    assert (bitcoin.current_price, bitcoin.market_cap) == (2.0, 20.0)
-    assert uow.commits == 1
-
-
-def test_update_missing_coin_rejected():
-    values = CoinUpdate(
-        name="Bitcoin",
-        symbol="btc",
-        current_price=2.0,
-        market_cap=20.0,
-        circulating_supply=10.0,
-        total_supply=21.0,
-        max_supply=21.0,
-        last_updated=datetime.fromisoformat("2026-11-26T10:00:00+00:00"),
-    )
-    uow = uow_with()
-    with pytest.raises(CoinNotFound):
-        asyncio.run(services.update_coin("bitcoin", values, uow))
     assert uow.commits == 0
 
 

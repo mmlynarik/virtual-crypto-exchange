@@ -220,10 +220,9 @@ def test_link_pending_router_errors(monkeypatch, raised, status):
 
 ## Known deviations (don't copy)
 
-`vce/coin/router.py` is older:
-- It has no router prefix and repeats `/coins` in each path.
+`vce/coins/router.py` is older:
 - It answers 422 for an already existing resource (should be 409).
 - `delete_coin_from_id` returns an untyped `{"message": "OK"}` (should be 204).
 - It imports the service functions by name.
 
-Follow this skill for new code, and align coin when you touch it, if the change stays in scope.
+Follow this skill for new code, and align coins when you touch it, if the change stays in scope.

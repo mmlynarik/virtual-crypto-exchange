@@ -2,8 +2,8 @@ from sqlalchemy.orm import registry, relationship
 
 from vce.auth.domain import RefreshToken
 from vce.auth.orm import refresh_token_table
-from vce.coin.domain import Coin
-from vce.coin.orm import coin_table
+from vce.coins.domain import Coin
+from vce.coins.orm import coin_table
 from vce.db import metadata
 from vce.user.domain import User
 from vce.user.orm import user_table
