@@ -19,9 +19,11 @@ async def get_coins_from_symbol(symbol: str, uow: UnitOfWork) -> list[CoinRespon
 
 
 @router.post("/coins", status_code=201)
-async def add_coins_from_symbol(coin: CoinCreate, uow: UnitOfWork, client: CoinClient) -> list[CoinResponse]:
+async def add_coins_from_symbol(
+    coin: CoinCreate, uow: UnitOfWork, coin_client: CoinClient
+) -> list[CoinResponse]:
     try:
-        coins = await add_coins(coin, uow, client)
+        coins = await add_coins(coin, uow, coin_client)
     except InvalidCoinSymbol:
         raise HTTPException(status_code=422, detail=f"Coin symbol {coin.symbol} is not valid")
     except CoinAlreadyExists:

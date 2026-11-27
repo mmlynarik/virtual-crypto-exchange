@@ -7,10 +7,10 @@ from vce.coin.schemas import CoinCreate, CoinUpdate
 from vce.uow import AbstractUnitOfWork, UniqueViolation
 
 
-async def add_coins(coin: CoinCreate, uow: AbstractUnitOfWork, client: AsyncClient) -> list[Coin]:
+async def add_coins(coin: CoinCreate, uow: AbstractUnitOfWork, coin_client: AsyncClient) -> list[Coin]:
     """Store the coins CoinGecko has for the symbol. CoinGecko is asked first, outside the transaction."""
-    ids = await get_coin_ids_from_symbol(client, coin.symbol)
-    coins = await get_coins_data(client, ids)
+    ids = await get_coin_ids_from_symbol(coin_client, coin.symbol)
+    coins = await get_coins_data(coin_client, ids)
     async with uow:
         if await uow.coins.exists(coin.symbol):
             raise CoinAlreadyExists(f"Symbol {coin.symbol} already exists in the database")
@@ -51,14 +51,14 @@ async def update_coin(id: str, new_coin_values: CoinUpdate, uow: AbstractUnitOfW
     return current_coin
 
 
-async def refresh_coins(uow: AbstractUnitOfWork, client: AsyncClient) -> None:
+async def refresh_coins(uow: AbstractUnitOfWork, coin_client: AsyncClient) -> None:
     """Update the market data of the stored coins from CoinGecko. Two short transactions, read and write,
     so that no database connection is held while CoinGecko answers."""
     async with uow:
         ids = [c.id for c in await uow.coins.list()]
     if not ids:
         return
-    refreshed_coins = await get_coins_data(client, ids)
+    refreshed_coins = await get_coins_data(coin_client, ids)
     async with uow:
         await uow.coins.update_market_data(refreshed_coins)
         await uow.commit()

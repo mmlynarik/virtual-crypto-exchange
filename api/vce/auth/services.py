@@ -109,9 +109,9 @@ async def _register_github_user(github_user: GithubUser, uow: AbstractUnitOfWork
     return user.id
 
 
-async def login_with_github(code: str, uow: AbstractUnitOfWork, client: AsyncClient) -> TokenPair:
-    github_access_token = await exchange_code_for_token(client, code)
-    github_user = await get_github_user(client, github_access_token)
+async def login_with_github(code: str, uow: AbstractUnitOfWork, github_client: AsyncClient) -> TokenPair:
+    github_access_token = await exchange_code_for_token(github_client, code)
+    github_user = await get_github_user(github_client, github_access_token)
 
     async with uow:
         user = await uow.users.get_by_github_id(github_user.id)

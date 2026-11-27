@@ -7,9 +7,9 @@ from vce.coin.exceptions import InvalidCoinSymbol
 from vce.settings import VS_CURRENCY
 
 
-async def get_coin_ids_from_symbol(client: AsyncClient, symbol: str) -> list[str]:
+async def get_coin_ids_from_symbol(coin_client: AsyncClient, symbol: str) -> list[str]:
     url = "/coins/list"
-    res = await client.get(url)
+    res = await coin_client.get(url)
     ids = []
     for coin in res.json():
         if coin["symbol"] == symbol:
@@ -19,10 +19,12 @@ async def get_coin_ids_from_symbol(client: AsyncClient, symbol: str) -> list[str
     return ids
 
 
-async def get_coins_data(client: AsyncClient, ids: list[str], vs_currency: str = VS_CURRENCY) -> list[Coin]:
+async def get_coins_data(
+    coin_client: AsyncClient, ids: list[str], vs_currency: str = VS_CURRENCY
+) -> list[Coin]:
     ids_string = ", ".join(ids)
     url = "/coins/markets"
-    res = await client.get(url, params={"ids": ids_string, "vs_currency": vs_currency})
+    res = await coin_client.get(url, params={"ids": ids_string, "vs_currency": vs_currency})
     coins = []
     for coin in res.json():
         coins.append(

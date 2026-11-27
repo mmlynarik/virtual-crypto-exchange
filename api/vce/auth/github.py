@@ -16,11 +16,11 @@ class GithubUser(BaseModel):
     email: str
 
 
-async def exchange_code_for_token(client: AsyncClient, code: str) -> str:
+async def exchange_code_for_token(github_client: AsyncClient, code: str) -> str:
     if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
         raise RuntimeError("Missing GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET env variable")
     try:
-        res = await client.post(
+        res = await github_client.post(
             GITHUB_TOKEN_URL,
             params={"client_id": GITHUB_CLIENT_ID, "client_secret": GITHUB_CLIENT_SECRET, "code": code},
             headers={"Accept": "application/json"},
@@ -37,21 +37,21 @@ async def exchange_code_for_token(client: AsyncClient, code: str) -> str:
     return access_token
 
 
-async def get_from_github(client: AsyncClient, path: str, access_token: str):
+async def get_from_github(github_client: AsyncClient, path: str, access_token: str):
     """GET a GitHub API path. The client carries the API base URL and Accept header (see vce/app.py)."""
     try:
-        res = await client.get(path, headers={"Authorization": f"Bearer {access_token}"})
+        res = await github_client.get(path, headers={"Authorization": f"Bearer {access_token}"})
         res.raise_for_status()
     except HTTPError as e:
         raise GithubAuthError(f"GitHub request to {path} failed: {e}") from e
     return res.json()
 
 
-async def get_github_user(client: AsyncClient, access_token: str) -> GithubUser:
+async def get_github_user(github_client: AsyncClient, access_token: str) -> GithubUser:
     """The GitHub account id and its primary email. The email comes from /user/emails (needs the
     user:email scope) rather than /user, which only shows an email the user chose to make public."""
-    data = await get_from_github(client, "/user", access_token)
-    emails = await get_from_github(client, "/user/emails", access_token)
+    data = await get_from_github(github_client, "/user", access_token)
+    emails = await get_from_github(github_client, "/user/emails", access_token)
 
     primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
     if primary is None:

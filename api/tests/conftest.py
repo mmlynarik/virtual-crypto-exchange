@@ -14,7 +14,7 @@ def login_github(monkeypatch):
     from tests.fakes import FakeUnitOfWork, github_client
     from vce.auth import services
 
-    async def exchange_code_for_token(client, code):
+    async def exchange_code_for_token(github_client, code):
         return "gh-token"
 
     monkeypatch.setattr(services, "exchange_code_for_token", exchange_code_for_token)

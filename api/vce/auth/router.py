@@ -64,9 +64,9 @@ def github_conflict(conflict: GithubConflict) -> HTTPException:
 
 
 @router.post("/github", responses={409: {"model": GithubConflictResponse}})
-async def login_github(body: GithubCode, uow: UnitOfWork, client: GithubClient) -> TokenPair:
+async def login_github(body: GithubCode, uow: UnitOfWork, github_client: GithubClient) -> TokenPair:
     try:
-        return await services.login_with_github(body.code, uow, client)
+        return await services.login_with_github(body.code, uow, github_client)
     except GithubAuthError as e:
         LOGGER.warning("GitHub login rejected: %s", e)
         raise UnauthorizedError("GitHub authentication failed")
