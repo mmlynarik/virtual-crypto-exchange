@@ -40,7 +40,7 @@ class AbstractUnitOfWork(abc.ABC):
 
     @abc.abstractmethod
     async def commit(self) -> None:
-        """Raises UniqueViolation, after rolling back, when the commit hits a unique constraint. What that
+        """When the commit hits a unique constraint it first rolls back and raises UniqueViolation. What that
         means (a taken email, an already linked GitHub account, ...) is for the caller to say."""
 
     @abc.abstractmethod
