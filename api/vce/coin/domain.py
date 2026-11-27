@@ -1,7 +1,7 @@
 from datetime import datetime
 
 
-class CGCoin:
+class Coin:
     """CoinGecko coin market data"""
 
     def __init__(

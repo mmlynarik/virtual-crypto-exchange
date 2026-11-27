@@ -3,49 +3,49 @@ from collections.abc import Sequence
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vce.coin.domain import CGCoin
+from vce.coin.domain import Coin
 from vce.utils import get_logger
 
 LOGGER = get_logger(__name__)
 
 
-class CGCoinRepository:
+class CoinRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def add(self, coin: CGCoin):
+    async def add(self, coin: Coin):
         self.session.add(coin)
         LOGGER.info("New coin added to database: %s", coin)
 
     async def exists(self, symbol: str) -> bool:
-        stmt = select(CGCoin).where(CGCoin.symbol == symbol)  # type: ignore
+        stmt = select(Coin).where(Coin.symbol == symbol)  # type: ignore
         result = await self.session.execute(stmt)
         return bool(result.scalars().all())
 
-    async def get_by_symbol(self, symbol: str) -> list[CGCoin]:
-        stmt = select(CGCoin).where(CGCoin.symbol == symbol)  # type: ignore
+    async def get_by_symbol(self, symbol: str) -> list[Coin]:
+        stmt = select(Coin).where(Coin.symbol == symbol)  # type: ignore
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_by_id(self, id: str) -> CGCoin | None:
-        return await self.session.get(CGCoin, id)
+    async def get_by_id(self, id: str) -> Coin | None:
+        return await self.session.get(Coin, id)
 
-    async def list(self) -> list[CGCoin]:
-        stmt = select(CGCoin)
+    async def list(self) -> list[Coin]:
+        stmt = select(Coin)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def delete(self, id: str):
-        obj = await self.session.get(CGCoin, id)
+        obj = await self.session.get(Coin, id)
         await self.session.delete(obj)
 
     # Sequence, not list: inside this class, list is the method above
-    async def update_market_data(self, coins: Sequence[CGCoin]):
+    async def update_market_data(self, coins: Sequence[Coin]):
         """Bulk UPDATE by id of the stored coins' market data from these; name and symbol stay."""
         if not coins:
             return
         await self.session.execute(
-            update(CGCoin),
+            update(Coin),
             [
                 {
                     "id": c.id,

@@ -13,7 +13,7 @@ from sqlalchemy import (
 from vce.db import metadata
 from vce.settings import EMAIL_MAX_LENGTH
 
-user = Table(
+user_table = Table(
     "user",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),

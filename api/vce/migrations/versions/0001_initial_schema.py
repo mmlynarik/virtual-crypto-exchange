@@ -22,7 +22,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.create_table(
-        "cg_coin",
+        "coin",
         sa.Column("id", sa.String(length=256), nullable=False),
         sa.Column("name", sa.String(length=256), nullable=True),
         sa.Column("symbol", sa.String(length=30), nullable=True),
@@ -48,4 +48,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("user")
-    op.drop_table("cg_coin")
+    op.drop_table("coin")

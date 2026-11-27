@@ -2,8 +2,8 @@ from sqlalchemy import Column, DateTime, Float, String, Table
 
 from vce.db import metadata
 
-cg_coin = Table(
-    "cg_coin",
+coin_table = Table(
+    "coin",
     metadata,
     Column("id", String(256), primary_key=True),
     Column("name", String(256)),

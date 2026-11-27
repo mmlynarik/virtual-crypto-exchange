@@ -8,7 +8,7 @@ import pytest
 
 from tests.fakes import FakeUnitOfWork
 from vce.coin import services
-from vce.coin.domain import CGCoin
+from vce.coin.domain import Coin
 from vce.coin.exceptions import CoinAlreadyExists, CoinNotFound, InvalidCoinSymbol
 from vce.coin.schemas import CGCoinCreate, CGCoinUpdate
 
@@ -56,8 +56,8 @@ def coingecko(requests: list[str] | None = None) -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url="https://coingecko.test", transport=httpx.MockTransport(handler))
 
 
-def stored_coin(id: str = "bitcoin", symbol: str = "btc", current_price: float | None = 1.0) -> CGCoin:
-    return CGCoin(
+def stored_coin(id: str = "bitcoin", symbol: str = "btc", current_price: float | None = 1.0) -> Coin:
+    return Coin(
         id=id,
         name=id.title(),
         symbol=symbol,
@@ -70,7 +70,7 @@ def stored_coin(id: str = "bitcoin", symbol: str = "btc", current_price: float |
     )
 
 
-def uow_with(*coins: CGCoin, failing_commits: int = 0) -> FakeUnitOfWork:
+def uow_with(*coins: Coin, failing_commits: int = 0) -> FakeUnitOfWork:
     uow = FakeUnitOfWork(failing_commits=failing_commits)
     for coin in coins:
         uow.coins.coins[coin.id] = coin

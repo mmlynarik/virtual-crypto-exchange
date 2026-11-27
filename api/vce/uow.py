@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from vce.auth.repository import RefreshTokenRepository
-from vce.coin.repository import CGCoinRepository
+from vce.coin.repository import CoinRepository
 from vce.user.repository import UsersRepository
 
 UNIQUE_VIOLATION_SQLSTATE = "23505"
@@ -26,7 +26,7 @@ class AbstractUnitOfWork(abc.ABC):
 
     users: UsersRepository
     refresh_tokens: RefreshTokenRepository
-    coins: CGCoinRepository
+    coins: CoinRepository
 
     async def __aenter__(self) -> Self:
         return self
@@ -52,7 +52,7 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
         self.session = self.session_factory()
         self.users = UsersRepository(self.session)
         self.refresh_tokens = RefreshTokenRepository(self.session)
-        self.coins = CGCoinRepository(self.session)
+        self.coins = CoinRepository(self.session)
         return await super().__aenter__()
 
     async def __aexit__(self, *args) -> None:

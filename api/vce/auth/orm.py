@@ -2,7 +2,7 @@ from sqlalchemy import UUID, Column, DateTime, ForeignKey, Table, Text, func
 
 from vce.db import metadata
 
-refresh_token = Table(
+refresh_token_table = Table(
     "refresh_token",
     metadata,
     Column("jti", UUID(as_uuid=True), primary_key=True),
